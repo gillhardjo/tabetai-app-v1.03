@@ -26,14 +26,14 @@ const firebaseConfig = {
   measurementId: "G-6189BCY5YH"
 };
 
-// Inisialisasi Firebase
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+const analytics = getAnalytics(app);
 
 // --- INITIAL SHARED DATA ---
 const ADMIN_CREDENTIALS = {
-  username: 'gillhardjo',
-  phone: '081285557779'
+  username: 'admin',
+  phone: '2131'
 };
 
 // Image URLs & WhatsApp
