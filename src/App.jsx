@@ -65,7 +65,7 @@ const generateInvoiceWAUrl = (order, userPhone) => {
     return `https://wa.me/${waNumber}?text=${text}`;
 };
 
-export default function TabetaiApp V1.03() {
+export default function TabetaiApp() {
   // State tersinkronisasi Firebase
   const [members, setMembers] = useState([]);
   const [menus, setMenus] = useState([]);
