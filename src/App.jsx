@@ -65,7 +65,7 @@ const generateInvoiceWAUrl = (order, userPhone) => {
     return `https://wa.me/${waNumber}?text=${text}`;
 };
 
-export default function TabetaiApp() {
+export default function TabetaiApp V1.03() {
   // State tersinkronisasi Firebase
   const [members, setMembers] = useState([]);
   const [menus, setMenus] = useState([]);
@@ -214,7 +214,7 @@ export default function TabetaiApp() {
                 <img src={logoImageUrl} alt="Tabetai Logo" className="w-full h-full object-cover" onError={(e) => { e.target.src = 'https://placehold.co/200x200/ef4444/ffffff?text=Tabetai'; }} />
               </div>
               <h1 className="text-3xl font-black text-red-600 tracking-tight mt-2">TABETAI</h1>
-              <p className="text-gray-600 mt-1 text-sm">Authentic Japanese Cuisine</p>
+              <p className="text-gray-600 mt-1 text-sm">Oishii Onigiri</p>
             </div>
             
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-red-100 animate-fade-in-up">
@@ -345,8 +345,8 @@ function MemberHome({ user, onNavigate, onLogout }) {
     <div className="flex-1 flex flex-col bg-gray-50">
       <div className="bg-red-600 pt-12 pb-24 px-6 rounded-b-[40px] text-white shadow-md relative z-10 flex justify-between items-start">
         <div>
-          <p className="text-red-100 text-sm font-medium">Konnichiwa,</p>
-          <h1 className="text-2xl font-bold mt-1 truncate">{user?.name}!</h1>
+          <h1 className="text-2xl font-bold mt-1 truncate">{user?.name}-san, Irasshaimase!</h1>
+          <p className="text-red-100 text-sm font-medium">Kyou, nani tabetai?</p>
           <div className="mt-2 inline-flex items-center gap-1.5 bg-red-700/50 px-3 py-1 rounded-full text-sm font-medium">
             <Tag size={14} className="text-yellow-300" /> {user?.points || 0} Poin
           </div>
@@ -359,8 +359,8 @@ function MemberHome({ user, onNavigate, onLogout }) {
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 bg-orange-100 text-orange-500 rounded-2xl flex items-center justify-center text-3xl">🍱</div>
             <div>
-              <h2 className="text-lg font-bold text-gray-800">Pesan Makanan</h2>
-              <p className="text-sm text-gray-500 mt-1">Lihat menu dan pesan sekarang</p>
+              <h2 className="text-lg font-bold text-gray-800">Menu</h2>
+              <p className="text-sm text-gray-500 mt-1">Lihat dan pesan makanan favoritmu sekarang</p>
             </div>
           </div>
           <ChevronLeft className="text-gray-300 rotate-180" />
@@ -371,7 +371,7 @@ function MemberHome({ user, onNavigate, onLogout }) {
             <div className="w-16 h-16 bg-blue-100 text-blue-500 rounded-2xl flex items-center justify-center"><Clock size={32} /></div>
             <div>
               <h2 className="text-lg font-bold text-gray-800">Status Pesanan</h2>
-              <p className="text-sm text-gray-500 mt-1">Lacak status pesanan aktifmu</p>
+              <p className="text-sm text-gray-500 mt-1">Cek status pesanan</p>
             </div>
           </div>
           <ChevronLeft className="text-gray-300 rotate-180" />
@@ -524,7 +524,7 @@ function MemberCheckout({ cart, onBack, updateQty, subtotal, onPay, promos }) {
     <div className="flex-1 flex flex-col bg-gray-50">
       <div className="flex items-center p-4 bg-white sticky top-0 z-20 shadow-sm"><button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-full"><ChevronLeft size={24} className="text-gray-700" /></button><h1 className="flex-1 text-center font-bold text-lg text-gray-800 pr-10">Konfirmasi Pesanan</h1></div>
       <div className="flex-1 overflow-y-auto p-4 pb-32">
-        <div className="bg-yellow-50 text-yellow-800 p-4 rounded-xl border border-yellow-200 mb-6 text-sm font-medium flex gap-3 items-start shadow-sm"><span className="text-xl">⚠️</span><p>Pre-Orders are accepted until 21.00 WIB. please make payment before checkout</p></div>
+        <div className="bg-yellow-50 text-yellow-800 p-4 rounded-xl border border-yellow-200 mb-6 text-sm font-medium flex gap-3 items-start shadow-sm"><span className="text-xl">⚠️</span><p>Pre-Order diterima hingga pukul 21.00 WIB. Mohon lakukan pembayaran sebelum checkout.</p></div>
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
           <div className="p-4 border-b border-gray-100 bg-gray-50/50"><h2 className="font-bold text-gray-800 text-sm">Daftar Pesanan</h2></div>
           <div className="divide-y divide-gray-100">
@@ -587,7 +587,7 @@ function MemberCheckout({ cart, onBack, updateQty, subtotal, onPay, promos }) {
         </div>
       </div>
       <div className="absolute bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100 shadow-[0_-10px_40px_rgba(0,0,0,0.08)] z-30">
-        <button onClick={() => onPay(finalTotal, appliedPromo ? { code: appliedPromo.code, value: discountAmount } : null)} className="w-full bg-red-600 text-white font-bold py-4 rounded-xl shadow-md hover:bg-red-700 active:scale-95 transition-transform flex items-center justify-center gap-2 text-lg">Pay Now <ChevronLeft className="rotate-180" size={20} /></button>
+        <button onClick={() => onPay(finalTotal, appliedPromo ? { code: appliedPromo.code, value: discountAmount } : null)} className="w-full bg-red-600 text-white font-bold py-4 rounded-xl shadow-md hover:bg-red-700 active:scale-95 transition-transform flex items-center justify-center gap-2 text-lg">Bayar Sekarang <ChevronLeft className="rotate-180" size={20} /></button>
       </div>
     </div>
   );
@@ -682,13 +682,13 @@ function AdminDashboard({ onNavigate, onLogout, stats }) {
     <div className="flex-1 flex flex-col bg-slate-100">
       <div className="bg-slate-900 pt-12 pb-20 px-6 rounded-b-[40px] text-white shadow-md relative z-10">
         <div className="flex justify-between items-center">
-          <div><p className="text-slate-400 text-sm font-medium">Selamat Datang,</p><h1 className="text-2xl font-bold mt-1">gillhardjo</h1></div>
+          <div><p className="text-slate-400 text-sm font-medium">Konnichiwa,</p><h1 className="text-2xl font-bold mt-1">gillhardjo</h1></div>
           <button onClick={onLogout} className="bg-slate-800 p-3 rounded-full hover:bg-slate-700 transition-colors"><LogOut size={20} /></button>
         </div>
       </div>
       <div className="flex-1 px-6 -mt-12 z-20 relative space-y-4 pb-10">
         <button onClick={() => onNavigate('menus')} className="w-full bg-white rounded-2xl p-5 shadow-sm border border-slate-200 flex items-center justify-between hover:shadow-md transition-all active:scale-[0.98] text-left">
-          <div className="flex items-center gap-4"><div className="w-14 h-14 bg-orange-100 text-orange-600 rounded-xl flex items-center justify-center"><UtensilsCrossed size={28} /></div><div><h2 className="text-lg font-bold text-slate-800">Manajemen Menu</h2><p className="text-sm text-slate-500 mt-0.5">{stats.menus} Menu aktif</p></div></div>
+          <div className="flex items-center gap-4"><div className="w-14 h-14 bg-orange-100 text-orange-600 rounded-xl flex items-center justify-center"><UtensilsCrossed size={28} /></div><div><h2 className="text-lg font-bold text-slate-800">Manajemen Menu</h2><p className="text-sm text-slate-500 mt-0.5">{stats.menus} Makanan aktif</p></div></div>
         </button>
         <button onClick={() => onNavigate('orders')} className="w-full bg-white rounded-2xl p-5 shadow-sm border border-slate-200 flex items-center justify-between hover:shadow-md transition-all active:scale-[0.98] text-left">
           <div className="flex items-center gap-4"><div className="w-14 h-14 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center"><ScrollText size={28} /></div><div><h2 className="text-lg font-bold text-slate-800">Pesanan Masuk</h2><p className="text-sm text-slate-500 mt-0.5">{stats.orders} Pesanan perlu diproses</p></div></div>
@@ -804,11 +804,11 @@ function AdminMenuForm({ menu, onSave, onCancel }) {
             <div className="w-16 h-16 bg-slate-100 rounded-xl overflow-hidden shrink-0 border border-slate-200 flex items-center justify-center">
                {formData.image ? <img src={formData.image} alt="Preview" className="w-full h-full object-cover" onError={(e) => { e.target.src = 'https://placehold.co/100x100/eeeeee/999999?text=No+Image'; }} /> : <span className="text-slate-400 text-xs">No Img</span>}
             </div>
-            <input required type="url" placeholder="https://..." value={formData.image} onChange={e => setFormData({...formData, image: e.target.value})} className="flex-1 px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 text-sm" />
+            <input required type="url" placeholder="paste img url disini" value={formData.image} onChange={e => setFormData({...formData, image: e.target.value})} className="flex-1 px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 text-sm" />
           </div>
         </div>
         <div><label className="block text-sm font-bold text-slate-700 mb-1">Deskripsi Singkat</label><textarea required value={formData.desc} onChange={e => setFormData({...formData, desc: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 text-sm" rows={2} /></div>
-        <div><label className="block text-sm font-bold text-slate-700 mb-1">Harga Dasar (Rp)</label><input required type="number" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900" /></div>
+        <div><label className="block text-sm font-bold text-slate-700 mb-1">Harga Jual (Rp)</label><input required type="number" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900" /></div>
         <div className="pt-4 border-t border-slate-200">
           <div className="flex justify-between items-center mb-3"><label className="block text-sm font-bold text-slate-700">Varian & Qty</label><button type="button" onClick={addVariant} className="text-xs bg-slate-900 text-white px-3 py-1.5 rounded-lg flex items-center gap-1"><Plus size={14}/> Tambah</button></div>
           <div className="space-y-3">
