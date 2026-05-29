@@ -34,8 +34,8 @@ const db = getFirestore(app);
 
 // --- INITIAL SHARED DATA ---
 const ADMIN_CREDENTIALS = {
-  username: 'admin',
-  phone: '2131'
+  username: 'gillhardjo',
+  phone: '081285557779'
 };
 
 // Image URLs & WhatsApp
