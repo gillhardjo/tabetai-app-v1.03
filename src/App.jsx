@@ -8,6 +8,7 @@ import {
 
 // --- FIREBASE IMPORTS ---
 import { initializeApp } from 'firebase/app';
+import { getAnalytics } from "firebase/analytics";
 import { 
   getFirestore, collection, doc, addDoc, 
   updateDoc, deleteDoc, onSnapshot 
@@ -29,6 +30,7 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
+const db = getFirestore(app);
 
 // --- INITIAL SHARED DATA ---
 const ADMIN_CREDENTIALS = {
