@@ -3,7 +3,7 @@ import {
   ShoppingCart, MessageCircle, ChevronLeft, 
   Plus, Minus, X, Download, Clock, Store, 
   Utensils, User, Phone, Users, UtensilsCrossed, 
-  ScrollText, Edit2, Save, Trash2, LogOut, Eye, EyeOff, Tag, Search, Filter
+  ScrollText, Edit2, Save, Trash2, LogOut, Eye, EyeOff, Tag, Search, Filter, CheckCircle
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -187,6 +187,7 @@ export default function TabetaiApp() {
       discount: discountObj,
       earnedPoints: earnedPoints,
       isPointsAwarded: false,
+      isStockDeducted: false,
       filterDateKey: isoDate,
       status: 'Menunggu Pembayaran',
       date: dateObj.toLocaleString('id-ID')
@@ -304,7 +305,7 @@ export default function TabetaiApp() {
               <AdminDashboard onNavigate={setAdminView} onLogout={handleLogout} stats={{ orders: orders.length, menus: menus.length, members: members.length, promos: promos.length }} />
             )}
             {adminView === 'menus' && <AdminMenuManager menus={menus} />}
-            {adminView === 'orders' && <AdminOrderManager orders={orders} members={members} />}
+            {adminView === 'orders' && <AdminOrderManager orders={orders} members={members} menus={menus} />}
             {adminView === 'members' && <AdminMemberManager members={members} />}
             {adminView === 'promos' && <AdminPromoManager promos={promos} />}
           </div>
@@ -886,7 +887,7 @@ function AdminMenuForm({ menu, onSave, onCancel }) {
   );
 }
 
-function AdminOrderManager({ orders, members }) {
+function AdminOrderManager({ orders, members, menus }) {
   const [filterName, setFilterName] = useState('');
   const [filterStatus, setFilterStatus] = useState('Semua');
   const [filterDate, setFilterDate] = useState('');
@@ -899,15 +900,39 @@ function AdminOrderManager({ orders, members }) {
       try { 
         const updates = { status: newStatus };
 
-        // Tambahkan Poin jika pesanan diubah ke 'Diproses' dan poin belum pernah diberikan
-        if (newStatus === 'Diproses' && !target.isPointsAwarded) {
-          updates.isPointsAwarded = true;
-          
-          const member = members.find(m => m.name === target.customer && m.phone === target.customerPhone);
-          if (member && member.dbId) {
-            await updateDoc(doc(db, 'members', member.dbId), { 
-              points: (member.points || 0) + (target.earnedPoints || 0) 
-            });
+        if (newStatus === 'Diproses') {
+          // 1. Tambahkan Poin (jika belum diberikan)
+          if (!target.isPointsAwarded) {
+            updates.isPointsAwarded = true;
+            
+            const member = members.find(m => m.name === target.customer && m.phone === target.customerPhone);
+            if (member && member.dbId) {
+              await updateDoc(doc(db, 'members', member.dbId), { 
+                points: (member.points || 0) + (target.earnedPoints || 0) 
+              });
+            }
+          }
+
+          // 2. Kurangi Stok Realtime (jika belum dikurangi)
+          if (!target.isStockDeducted) {
+            updates.isStockDeducted = true;
+
+            // Loop untuk setiap item yang dipesan
+            for (const item of target.items) {
+              const menuTarget = menus.find(m => (m.dbId || m.id) === (item.dbId || item.id));
+              if (menuTarget && menuTarget.dbId) {
+                // Kurangi qty khusus pada varian yang dipilih
+                const updatedVariants = menuTarget.variants.map(v => {
+                  if (v.name === item.variant) {
+                    return { ...v, qty: Math.max(0, v.qty - item.quantity) }; // Cegah stok minus
+                  }
+                  return v;
+                });
+                
+                // Simpan pembaruan stok ke database
+                await updateDoc(doc(db, 'menus', menuTarget.dbId), { variants: updatedVariants });
+              }
+            }
           }
         }
 
