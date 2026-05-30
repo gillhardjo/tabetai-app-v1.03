@@ -729,7 +729,7 @@ function AdminDashboard({ onNavigate, onLogout, stats }) {
     <div className="flex-1 flex flex-col bg-slate-100">
       <div className="bg-slate-900 pt-12 pb-20 px-6 rounded-b-[40px] text-white shadow-md relative z-10">
         <div className="flex justify-between items-center">
-          <div><p className="text-slate-400 text-sm font-medium">Selamat Datang,</p><h1 className="text-2xl font-bold mt-1">Admin Tabetai</h1></div>
+          <div><p className="text-slate-400 text-sm font-medium">Konnichiwa,</p><h1 className="text-2xl font-bold mt-1">Admin Tabetai</h1></div>
           <button onClick={onLogout} className="bg-slate-800 p-3 rounded-full hover:bg-slate-700 transition-colors"><LogOut size={20} /></button>
         </div>
       </div>
