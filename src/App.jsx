@@ -623,7 +623,7 @@ function MemberCheckout({ cart, onBack, updateQty, subtotal, onPay, promos }) {
         </div>
       </div>
       <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-4 bg-white border-t border-gray-100 shadow-[0_-10px_40px_rgba(0,0,0,0.08)] z-30">
-        <button onClick={() => onPay(finalTotal, appliedPromo)} className="w-full bg-red-600 text-white font-bold py-4 rounded-xl shadow-md hover:bg-red-700 active:scale-95 transition-transform flex items-center justify-center gap-2 text-lg">Pay Now <ChevronLeft className="rotate-180" size={20} /></button>
+        <button onClick={() => onPay(finalTotal, appliedPromo)} className="w-full bg-red-600 text-white font-bold py-4 rounded-xl shadow-md hover:bg-red-700 active:scale-95 transition-transform flex items-center justify-center gap-2 text-lg">Bayar Sekarang <ChevronLeft className="rotate-180" size={20} /></button>
       </div>
     </div>
   );
