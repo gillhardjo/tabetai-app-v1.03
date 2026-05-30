@@ -3,7 +3,7 @@ import {
   ShoppingCart, MessageCircle, ChevronLeft, 
   Plus, Minus, X, Download, Clock, Store, 
   Utensils, User, Phone, Users, UtensilsCrossed, 
-  ScrollText, Edit2, Save, Trash2, LogOut, Eye, EyeOff, Tag, Search, Filter, GripVertical
+  ScrollText, Edit2, Save, Trash2, LogOut, Eye, EyeOff, Tag, Search, Filter
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -172,6 +172,11 @@ export default function TabetaiApp() {
 
   const placeOrder = async (finalTotal, discountObj) => {
     const earnedPoints = Math.floor(finalTotal * 0.1); 
+    
+    // Simpan kunci format tanggal standar untuk memudahkan filter admin
+    const dateObj = new Date();
+    const isoDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+
     const newOrderData = {
       id: `TBT-${Math.floor(Math.random() * 10000)}`,
       customer: activeUser.name,
@@ -181,17 +186,16 @@ export default function TabetaiApp() {
       originalTotal: getCartTotal(),
       discount: discountObj,
       earnedPoints: earnedPoints,
+      isPointsAwarded: false,
+      filterDateKey: isoDate,
       status: 'Menunggu Pembayaran',
-      date: new Date().toLocaleString('id-ID')
+      date: dateObj.toLocaleString('id-ID')
     };
     
     try {
       const res = await addDoc(collection(db, 'orders'), newOrderData);
       
-      // Update Poin Member
-      if (activeUser.dbId) {
-        await updateDoc(doc(db, 'members', activeUser.dbId), { points: (activeUser.points || 0) + earnedPoints });
-      }
+      // Poin tidak lagi ditambahkan di sini, tapi saat Admin memproses pesanan
       
       // Optimistic update
       setOrders([{ ...newOrderData, dbId: res.id }, ...orders]);
@@ -300,7 +304,7 @@ export default function TabetaiApp() {
               <AdminDashboard onNavigate={setAdminView} onLogout={handleLogout} stats={{ orders: orders.length, menus: menus.length, members: members.length, promos: promos.length }} />
             )}
             {adminView === 'menus' && <AdminMenuManager menus={menus} />}
-            {adminView === 'orders' && <AdminOrderManager orders={orders} />}
+            {adminView === 'orders' && <AdminOrderManager orders={orders} members={members} />}
             {adminView === 'members' && <AdminMemberManager members={members} />}
             {adminView === 'promos' && <AdminPromoManager promos={promos} />}
           </div>
@@ -310,6 +314,9 @@ export default function TabetaiApp() {
   );
 }
 
+// ==========================================
+// AUTH COMPONENTS
+// ==========================================
 function AuthForm({ onSubmit, btnText }) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -340,6 +347,9 @@ function AuthForm({ onSubmit, btnText }) {
   );
 }
 
+// ==========================================
+// MEMBER SUB-COMPONENTS
+// ==========================================
 function MemberHome({ user, onNavigate, onLogout }) {
   return (
     <div className="flex-1 flex flex-col bg-gray-50">
@@ -380,6 +390,7 @@ function MemberHome({ user, onNavigate, onLogout }) {
     </div>
   );
 }
+
 function MemberMenu({ menus, onBack, onSelectItem, cartCount, cartTotal, onCheckout }) {
   return (
     <div className="flex-1 flex flex-col bg-white">
@@ -407,7 +418,7 @@ function MemberMenu({ menus, onBack, onSelectItem, cartCount, cartTotal, onCheck
       </div>
 
       {cartCount > 0 && (
-        <div className="absolute bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100 shadow-[0_-10px_40px_rgba(0,0,0,0.08)] z-30 animate-fade-in-up">
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100 shadow-[0_-10px_40px_rgba(0,0,0,0.08)] z-30 max-w-md mx-auto animate-fade-in-up">
           <div onClick={onCheckout} className="bg-red-600 text-white p-4 rounded-2xl flex items-center justify-between shadow-lg cursor-pointer active:scale-[0.98] transition-transform">
             <div className="flex flex-col">
               <span className="text-sm text-red-100 font-medium">{cartCount} Item di keranjang</span>
@@ -433,57 +444,115 @@ function VariantModal({ item, onClose, onAdd }) {
   };
 
   return (
-    <div className="absolute inset-0 bg-black/60 z-50 flex flex-col justify-end">
-      <div className="bg-white rounded-t-3xl p-6 w-full max-h-[90vh] flex flex-col shadow-2xl relative animate-slide-up">
-        <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200"><X size={20} /></button>
-        <div className="flex gap-4 items-center mb-6 border-b border-gray-100 pb-6 mt-2">
-           <div className="w-20 h-20 bg-gray-50 rounded-2xl flex items-center justify-center overflow-hidden shrink-0"><img src={item.image} alt={item.name} className="w-full h-full object-cover" /></div>
-            <div><h2 className="font-bold text-xl text-gray-800">{item.name}</h2><p className="text-red-600 font-bold text-lg mt-1">{formatRp(item.price)}</p></div>
+    <div className="fixed inset-0 z-50 flex justify-center">
+      {/* Overlay gelap yang bisa diklik untuk menutup modal */}
+      <div className="absolute inset-0 bg-black/60" onClick={onClose}></div>
+      
+      {/* Kontainer Utama Modal */}
+      <div className="bg-white rounded-t-3xl w-full max-w-md mt-auto max-h-[90vh] flex flex-col shadow-2xl relative z-10 animate-slide-up">
+        
+        {/* HEADER MODAL (Fixed) */}
+        <div className="p-6 pb-4 border-b border-gray-100 relative">
+          <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200">
+            <X size={20} />
+          </button>
+          <div className="flex gap-4 items-center mt-2">
+            <div className="w-20 h-20 bg-gray-50 rounded-2xl flex items-center justify-center overflow-hidden shrink-0">
+              <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+            </div>
+            <div>
+              <h2 className="font-bold text-xl text-gray-800">{item.name}</h2>
+              <p className="text-red-600 font-bold text-lg mt-1">{formatRp(item.price)}</p>
+            </div>
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto mb-6">
+        {/* KONTEN SCROLLABLE (Varian & Catatan) */}
+        <div className="flex-1 overflow-y-auto p-6">
           <h3 className="font-bold text-gray-800 mb-3 text-sm">Pilih Varian <span className="text-red-500">*</span></h3>
           <div className="space-y-2 mb-6">
             {item.variants.map(variant => {
               const isAvailable = variant.qty > 0;
               return (
                 <label key={variant.name} className={`flex items-center justify-between p-4 border rounded-xl transition-all ${!isAvailable ? 'opacity-50 bg-gray-50 cursor-not-allowed' : 'cursor-pointer'} ${selectedVariant === variant.name ? 'border-red-500 bg-red-50/50' : 'border-gray-200'}`}>
-                  <span className={`font-medium ${selectedVariant === variant.name ? 'text-red-700' : 'text-gray-700'}`}>{variant.name} {!isAvailable && '(Habis)'}</span>
+                  <span className={`font-medium ${selectedVariant === variant.name ? 'text-red-700' : 'text-gray-700'}`}>
+                    {variant.name} {!isAvailable && '(Habis)'}
+                  </span>
                   {isAvailable && (
                     <>
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedVariant === variant.name ? 'border-red-500' : 'border-gray-300'}`}>{selectedVariant === variant.name && <div className="w-2.5 h-2.5 bg-red-500 rounded-full" />}</div>
-                      <input type="radio" name="variant" value={variant.name} disabled={!isAvailable} checked={selectedVariant === variant.name} onChange={() => setSelectedVariant(variant.name)} className="hidden" />
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedVariant === variant.name ? 'border-red-500' : 'border-gray-300'}`}>
+                        {selectedVariant === variant.name && <div className="w-2.5 h-2.5 bg-red-500 rounded-full" />}
+                      </div>
+                      <input 
+                        type="radio" name="variant" value={variant.name} disabled={!isAvailable}
+                        checked={selectedVariant === variant.name} onChange={() => setSelectedVariant(variant.name)} className="hidden"
+                      />
                     </>
                   )}
                 </label>
               );
             })}
           </div>
-          <h3 className="font-bold text-gray-800 mb-3 text-sm">Catatan (Opsional)</h3>
-          <textarea placeholder="Contoh: Jangan terlalu pedas, kuah dipisah..." value={note} onChange={(e) => setNote(e.target.value)} className="w-full p-4 border border-gray-200 rounded-xl focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all text-sm resize-none" rows="2" />
+
+          <h3 className="font-bold text-gray-800 mb-3 text-sm">Catatan Tambahan</h3>
+          <textarea 
+            placeholder="Contoh: Jangan terlalu pedas, kuah dipisah..." 
+            value={note} 
+            onChange={(e) => setNote(e.target.value)} 
+            className="w-full p-4 border border-gray-200 rounded-xl focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all text-sm resize-none" 
+            rows="2" 
+          />
         </div>
 
-        {availableVariants.length > 0 ? (
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-4 bg-gray-100 p-2 rounded-xl">
-              <button onClick={() => setQty(Math.max(1, qty - 1))} className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm text-gray-600"><Minus size={18} /></button>
-              <span className="font-bold text-lg w-4 text-center">{qty}</span>
-              <button onClick={() => setQty(qty + 1)} className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm text-red-600"><Plus size={18} /></button>
+        {/* FOOTER ACTION (Fixed Floating Bottom) */}
+        <div className="p-4 bg-white border-t border-gray-100 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] pb-safe">
+          {availableVariants.length > 0 ? (
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4 bg-gray-100 p-2 rounded-xl">
+                <button onClick={() => setQty(Math.max(1, qty - 1))} className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm text-gray-600"><Minus size={18} /></button>
+                <span className="font-bold text-lg w-4 text-center">{qty}</span>
+                <button onClick={() => setQty(qty + 1)} className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm text-red-600"><Plus size={18} /></button>
+              </div>
+              <button onClick={handleAdd} className="flex-1 bg-red-600 text-white font-bold py-4 rounded-xl shadow-md hover:bg-red-700 active:scale-95 transition-transform">
+                Tambah - {formatRp(item.price * qty)}
+              </button>
             </div>
-            <button onClick={handleAdd} className="flex-1 bg-red-600 text-white font-bold py-4 rounded-xl shadow-md hover:bg-red-700 active:scale-95 transition-transform">Tambah - {formatRp(item.price * qty)}</button>
-          </div>
-        ) : (
-          <button disabled className="w-full bg-gray-300 text-gray-500 font-bold py-4 rounded-xl shadow-sm">Stok Habis</button>
-        )}
+          ) : (
+            <button disabled className="w-full bg-gray-300 text-gray-500 font-bold py-4 rounded-xl shadow-sm">Stok Habis</button>
+          )}
+        </div>
+
       </div>
     </div>
   );
 }
 
 function MemberCheckout({ cart, onBack, updateQty, subtotal, onPay, promos }) {
-  const [promoCodeInput, setPromoCodeInput] = useState('');
+  const [promoCode, setPromoCode] = useState('');
   const [appliedPromo, setAppliedPromo] = useState(null);
   const [promoError, setPromoError] = useState('');
+
+  const handleApplyPromo = () => {
+    setPromoError('');
+    if (!promoCode) return;
+    
+    const validPromo = promos.find(p => p.code === promoCode.toUpperCase() && p.isActive !== false);
+    if (validPromo) {
+      setAppliedPromo(validPromo);
+    } else {
+      setAppliedPromo(null);
+      setPromoError('Kode promo tidak valid atau tidak aktif.');
+    }
+  };
+
+  const discountAmount = useMemo(() => {
+    if (!appliedPromo) return 0;
+    if (appliedPromo.type === 'percent') return Math.floor(subtotal * (appliedPromo.value / 100));
+    return appliedPromo.value; // nominal
+  }, [appliedPromo, subtotal]);
+
+  const finalTotal = Math.max(0, subtotal - discountAmount);
+  const estimatedPoints = Math.floor(finalTotal * 0.1);
 
   if (cart.length === 0) {
     return (
@@ -494,37 +563,16 @@ function MemberCheckout({ cart, onBack, updateQty, subtotal, onPay, promos }) {
     );
   }
 
-  const handleApplyPromo = () => {
-    setPromoError('');
-    if (!promoCodeInput.trim()) return;
-    const promo = promos.find(p => p.code.toLowerCase() === promoCodeInput.toLowerCase() && p.isActive !== false);
-    if (promo) {
-      setAppliedPromo(promo);
-    } else {
-      setAppliedPromo(null);
-      setPromoError('Kode promo tidak valid atau kadaluarsa.');
-    }
-  };
-
-  const handleRemovePromo = () => {
-    setAppliedPromo(null);
-    setPromoCodeInput('');
-    setPromoError('');
-  };
-
-  let discountAmount = 0;
-  if (appliedPromo) {
-    if (appliedPromo.type === 'percent') discountAmount = (subtotal * appliedPromo.value) / 100;
-    else discountAmount = appliedPromo.value;
-    if (discountAmount > subtotal) discountAmount = subtotal;
-  }
-  const finalTotal = subtotal - discountAmount;
-
   return (
     <div className="flex-1 flex flex-col bg-gray-50">
       <div className="flex items-center p-4 bg-white sticky top-0 z-20 shadow-sm"><button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-full"><ChevronLeft size={24} className="text-gray-700" /></button><h1 className="flex-1 text-center font-bold text-lg text-gray-800 pr-10">Konfirmasi Pesanan</h1></div>
       <div className="flex-1 overflow-y-auto p-4 pb-32">
-        <div className="bg-yellow-50 text-yellow-800 p-4 rounded-xl border border-yellow-200 mb-6 text-sm font-medium flex gap-3 items-start shadow-sm"><span className="text-xl">⚠️</span><p>Pre-Order diterima hingga pukul 21.00 WIB. Mohon lakukan pembayaran sebelum checkout.</p></div>
+        
+        <div className="bg-yellow-50 text-yellow-800 p-4 rounded-xl border border-yellow-200 mb-6 text-sm font-medium flex gap-3 items-start shadow-sm">
+          <span className="text-xl">⚠️</span> 
+          <p>Pre-Order diterima hingga pukul 21.00 WIB. Mohon lakukan pembayaran sebelum checkout</p>
+        </div>
+
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
           <div className="p-4 border-b border-gray-100 bg-gray-50/50"><h2 className="font-bold text-gray-800 text-sm">Daftar Pesanan</h2></div>
           <div className="divide-y divide-gray-100">
@@ -549,45 +597,33 @@ function MemberCheckout({ cart, onBack, updateQty, subtotal, onPay, promos }) {
             ))}
           </div>
         </div>
-        
-        {/* Promo Section */}
+
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6">
-          <h2 className="font-bold text-gray-800 text-sm mb-3">Punya Kode Promo?</h2>
-          {!appliedPromo ? (
-            <div>
-              <div className="flex gap-2">
-                <input type="text" value={promoCodeInput} onChange={e => setPromoCodeInput(e.target.value)} placeholder="Masukkan kode voucher" className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none text-sm uppercase" />
-                <button onClick={handleApplyPromo} className="bg-gray-900 text-white font-bold px-5 py-2.5 rounded-xl text-sm">Pakai</button>
-              </div>
-              {promoError && <p className="text-red-500 text-xs mt-2">{promoError}</p>}
-            </div>
-          ) : (
-            <div className="bg-green-50 border border-green-200 p-3 rounded-xl flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <Tag size={16} className="text-green-600" />
-                <div><p className="text-sm font-bold text-green-800">{appliedPromo.code}</p><p className="text-xs text-green-600">Diskon diaplikasikan</p></div>
-              </div>
-              <button onClick={handleRemovePromo} className="text-gray-400 hover:text-red-500 p-1"><X size={16} /></button>
-            </div>
-          )}
+          <h2 className="font-bold text-gray-800 text-sm mb-3">Kode Promo / Voucher</h2>
+          <div className="flex gap-2">
+            <input type="text" value={promoCode} onChange={(e) => setPromoCode(e.target.value)} placeholder="Masukkan kode promo" className="flex-1 px-4 py-3 rounded-xl border border-gray-200 focus:border-red-500 outline-none uppercase text-sm" />
+            <button onClick={handleApplyPromo} className="bg-gray-900 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-gray-800 active:scale-95 transition-transform">Pakai</button>
+          </div>
+          {promoError && <p className="text-red-500 text-xs mt-2 font-medium">{promoError}</p>}
+          {appliedPromo && <p className="text-green-600 text-xs mt-2 font-medium flex items-center gap-1"><CheckCircle size={14} /> Berhasil! Potongan {appliedPromo.type === 'percent' ? `${appliedPromo.value}%` : formatRp(appliedPromo.value)} diterapkan.</p>}
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
           <h2 className="font-bold text-gray-800 text-sm mb-3">Ringkasan Pembayaran</h2>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between text-gray-600"><span>Subtotal</span><span>{formatRp(subtotal)}</span></div>
-            {discountAmount > 0 && <div className="flex justify-between text-green-600 font-medium"><span>Diskon Promo</span><span>-{formatRp(discountAmount)}</span></div>}
+            {discountAmount > 0 && <div className="flex justify-between text-green-600 font-medium"><span>Diskon Promo ({appliedPromo.code})</span><span>-{formatRp(discountAmount)}</span></div>}
           </div>
           <div className="border-t border-dashed border-gray-200 mt-3 pt-3 flex justify-between items-center">
             <span className="font-bold text-gray-800">Total</span><span className="font-black text-red-600 text-lg">{formatRp(finalTotal)}</span>
           </div>
-          <div className="mt-2 text-xs text-center text-gray-400 bg-gray-50 py-1.5 rounded-lg border border-gray-100">
-            Dapatkan <strong>{Math.floor(finalTotal * 0.1)} Poin</strong> dari pesanan ini
+          <div className="bg-red-50 text-red-700 text-xs text-center p-2 rounded-lg mt-4 font-medium">
+             Anda akan mendapatkan <strong className="text-red-800">{estimatedPoints} Poin</strong> dari pesanan ini!
           </div>
         </div>
       </div>
-      <div className="absolute bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100 shadow-[0_-10px_40px_rgba(0,0,0,0.08)] z-30">
-        <button onClick={() => onPay(finalTotal, appliedPromo ? { code: appliedPromo.code, value: discountAmount } : null)} className="w-full bg-red-600 text-white font-bold py-4 rounded-xl shadow-md hover:bg-red-700 active:scale-95 transition-transform flex items-center justify-center gap-2 text-lg">Bayar Sekarang <ChevronLeft className="rotate-180" size={20} /></button>
+      <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-4 bg-white border-t border-gray-100 shadow-[0_-10px_40px_rgba(0,0,0,0.08)] z-30">
+        <button onClick={() => onPay(finalTotal, appliedPromo)} className="w-full bg-red-600 text-white font-bold py-4 rounded-xl shadow-md hover:bg-red-700 active:scale-95 transition-transform flex items-center justify-center gap-2 text-lg">Pay Now <ChevronLeft className="rotate-180" size={20} /></button>
       </div>
     </div>
   );
@@ -595,12 +631,15 @@ function MemberCheckout({ cart, onBack, updateQty, subtotal, onPay, promos }) {
 
 function MemberPayment({ onCheckStatus, order, userPhone }) {
   if(!order) return null;
-  const handleSaveImage = () => { window.open(qrisImageUrl, '_blank'); };
-  
+
   const handleConfirmWA = () => {
+    let waNumber = ADMIN_WA_NUMBER.replace(/[^\d+]/g, ''); 
     const text = `Halo Admin Tabetai, saya ${order.customer} sudah melakukan pembayaran via QRIS untuk Order ID: ${order.id}. Mohon dicek ya!`;
-    window.open(`https://wa.me/${ADMIN_WA_NUMBER}?text=${text}`, '_blank');
+    window.open(`https://wa.me/${waNumber}?text=${encodeURIComponent(text)}`, '_blank');
   };
+
+  const handleDownloadInvoice = () => { window.open(generateInvoiceWAUrl(order, userPhone), '_blank'); };
+  const handleSaveQRIS = () => { window.open(qrisImageUrl, '_blank'); };
 
   return (
     <div className="flex-1 flex flex-col bg-white">
@@ -612,17 +651,22 @@ function MemberPayment({ onCheckStatus, order, userPhone }) {
           <img src={qrisImageUrl} alt="QRIS Code" className="w-full h-full object-contain p-2" />
           <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-red-600 text-white px-4 py-1 rounded-full text-xs font-bold tracking-wider">QRIS TABETAI</div>
         </div>
-        <div className="flex gap-3 w-full max-w-[280px]">
-          <button onClick={handleSaveImage} className="flex-1 flex flex-col items-center justify-center gap-1 text-red-600 font-semibold border-2 border-red-100 bg-red-50 p-3 rounded-xl hover:bg-red-100 transition-colors"><Download size={20} /> <span className="text-xs">Save QRIS</span></button>
-          <button onClick={() => window.open(generateInvoiceWAUrl(order, userPhone), '_blank')} className="flex-1 flex flex-col items-center justify-center gap-1 text-blue-600 font-semibold border-2 border-blue-100 bg-blue-50 p-3 rounded-xl hover:bg-blue-100 transition-colors"><ScrollText size={20} /> <span className="text-xs">Kirim Invoice</span></button>
-        </div>
         
-        <div className="w-full mt-10 space-y-3">
-          <button onClick={handleConfirmWA} className="w-full bg-green-600 text-white font-bold py-4 rounded-xl shadow-md hover:bg-green-700 active:scale-95 transition-transform flex items-center justify-center gap-2">
-            <MessageCircle size={20} /> Konfirmasi Pesanan WA
+        <div className="flex gap-2 w-full max-w-[280px]">
+           <button onClick={handleSaveQRIS} className="flex-1 flex items-center justify-center gap-2 text-red-600 font-semibold border-2 border-red-100 bg-red-50 py-3 rounded-xl hover:bg-red-100 transition-colors text-sm">
+             <Download size={16} /> QRIS
+           </button>
+           <button onClick={handleDownloadInvoice} className="flex-1 flex items-center justify-center gap-2 text-blue-600 font-semibold border-2 border-blue-100 bg-blue-50 py-3 rounded-xl hover:bg-blue-100 transition-colors text-sm">
+             <ScrollText size={16} /> Invoice
+           </button>
+        </div>
+
+        <div className="w-full mt-auto pt-10 space-y-3">
+          <button onClick={handleConfirmWA} className="w-full bg-green-500 text-white font-bold py-4 rounded-xl shadow-md hover:bg-green-600 active:scale-95 transition-transform flex items-center justify-center gap-2">
+            <MessageCircle size={20} /> Konfirmasi via WA
           </button>
           <button onClick={onCheckStatus} className="w-full bg-gray-900 text-white font-bold py-4 rounded-xl shadow-md hover:bg-gray-800 active:scale-95 transition-transform">
-            Cek Status Pembayaran
+            Cek Status Pesanan
           </button>
         </div>
       </div>
@@ -632,7 +676,7 @@ function MemberPayment({ onCheckStatus, order, userPhone }) {
 
 function MemberStatus({ orders, onBack, userPhone }) {
   return (
-    <div className="flex-1 flex flex-col bg-gray-50 pb-24">
+    <div className="flex-1 flex flex-col bg-gray-50 relative pb-24">
       <div className="flex items-center p-4 bg-white sticky top-0 z-20 shadow-sm border-b border-gray-100"><button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><ChevronLeft size={24} className="text-gray-700" /></button><h1 className="flex-1 text-center font-bold text-lg text-gray-800 pr-10">Status Pesanan</h1></div>
       <div className="flex-1 overflow-y-auto p-4">
         {orders.length === 0 ? (
@@ -641,10 +685,10 @@ function MemberStatus({ orders, onBack, userPhone }) {
           <div className="space-y-4">
             {orders.map((order, index) => (
               <div key={order.dbId || order.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 relative overflow-hidden">
-                <div className={`absolute top-0 left-0 w-1.5 h-full ${order.status === 'Selesai' ? 'bg-green-500' : 'bg-orange-500'}`} />
+                <div className={`absolute top-0 left-0 w-1.5 h-full ${order.status === 'Selesai' ? 'bg-green-500' : order.status === 'Diproses' ? 'bg-blue-500' : 'bg-orange-500'}`} />
                 <div className="flex justify-between items-start mb-3">
                   <div><p className="text-xs text-gray-500 mb-0.5">{order.date}</p><p className="font-bold text-gray-800 text-sm">Order ID: {order.id}</p></div>
-                  <span className={`text-xs font-bold px-3 py-1 rounded-full ${order.status === 'Selesai' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{order.status}</span>
+                  <span className={`text-xs font-bold px-3 py-1 rounded-full ${order.status === 'Selesai' ? 'bg-green-100 text-green-700' : order.status === 'Diproses' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>{order.status}</span>
                 </div>
                 <div className="border-t border-b border-gray-50 py-3 my-3">
                   <p className="text-sm text-gray-600 mb-2">{order.items.length} Menu dipesan:</p>
@@ -656,48 +700,51 @@ function MemberStatus({ orders, onBack, userPhone }) {
                       </div>
                     ))}
                   </div>
-                  {order.discount && order.discount.value > 0 && <p className="text-xs text-green-600 font-medium mt-2">- Diskon: {formatRp(order.discount.value)}</p>}
-                  {order.earnedPoints > 0 && <p className="text-xs text-yellow-600 font-medium mt-1">+ Mendapat {order.earnedPoints} Poin</p>}
                 </div>
-                <div className="flex justify-between items-center mb-3">
-                  <span className="text-sm text-gray-500">Total Belanja</span><span className="font-bold text-gray-800">{formatRp(order.total)}</span>
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-sm text-gray-500">Total Belanja</span>
+                  <span className="font-bold text-gray-800">{formatRp(order.total)}</span>
                 </div>
-                <button onClick={() => window.open(generateInvoiceWAUrl(order, userPhone), '_blank')} className="w-full bg-blue-50 text-blue-600 text-sm font-semibold py-2.5 rounded-xl border border-blue-100 hover:bg-blue-100 transition-colors flex items-center justify-center gap-2">
-                  <Download size={16} /> Unduh Invoice WA
+                <button onClick={() => window.open(generateInvoiceWAUrl(order, userPhone), '_blank')} className="w-full flex items-center justify-center gap-2 text-blue-600 font-semibold border border-blue-100 bg-blue-50 py-2 rounded-lg hover:bg-blue-100 transition-colors text-sm">
+                   <Download size={14} /> Download Invoice WA
                 </button>
               </div>
             ))}
           </div>
         )}
       </div>
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] z-30 max-w-md mx-auto">
-        <button onClick={onBack} className="w-full bg-gray-100 text-gray-800 font-bold py-3.5 rounded-xl hover:bg-gray-200 transition-colors">Kembali ke Beranda</button>
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100 shadow-[0_-10px_40px_rgba(0,0,0,0.08)] z-30 max-w-md mx-auto">
+        <button onClick={onBack} className="w-full bg-slate-100 text-slate-800 font-bold py-4 rounded-xl hover:bg-slate-200 active:scale-95 transition-transform flex items-center justify-center gap-2">Kembali ke Beranda</button>
       </div>
     </div>
   );
 }
 
+
+// ==========================================
+// ADMIN SUB-COMPONENTS
+// ==========================================
 function AdminDashboard({ onNavigate, onLogout, stats }) {
   return (
     <div className="flex-1 flex flex-col bg-slate-100">
       <div className="bg-slate-900 pt-12 pb-20 px-6 rounded-b-[40px] text-white shadow-md relative z-10">
         <div className="flex justify-between items-center">
-          <div><p className="text-slate-400 text-sm font-medium">Konnichiwa,</p><h1 className="text-2xl font-bold mt-1">gillhardjo</h1></div>
+          <div><p className="text-slate-400 text-sm font-medium">Selamat Datang,</p><h1 className="text-2xl font-bold mt-1">Admin Tabetai</h1></div>
           <button onClick={onLogout} className="bg-slate-800 p-3 rounded-full hover:bg-slate-700 transition-colors"><LogOut size={20} /></button>
         </div>
       </div>
       <div className="flex-1 px-6 -mt-12 z-20 relative space-y-4 pb-10">
         <button onClick={() => onNavigate('menus')} className="w-full bg-white rounded-2xl p-5 shadow-sm border border-slate-200 flex items-center justify-between hover:shadow-md transition-all active:scale-[0.98] text-left">
-          <div className="flex items-center gap-4"><div className="w-14 h-14 bg-orange-100 text-orange-600 rounded-xl flex items-center justify-center"><UtensilsCrossed size={28} /></div><div><h2 className="text-lg font-bold text-slate-800">Manajemen Menu</h2><p className="text-sm text-slate-500 mt-0.5">{stats.menus} Makanan aktif</p></div></div>
+          <div className="flex items-center gap-4"><div className="w-14 h-14 bg-orange-100 text-orange-600 rounded-xl flex items-center justify-center"><UtensilsCrossed size={28} /></div><div><h2 className="text-lg font-bold text-slate-800">Manajemen Menu</h2><p className="text-sm text-slate-500 mt-0.5">{stats.menus} Menu aktif</p></div></div>
         </button>
         <button onClick={() => onNavigate('orders')} className="w-full bg-white rounded-2xl p-5 shadow-sm border border-slate-200 flex items-center justify-between hover:shadow-md transition-all active:scale-[0.98] text-left">
           <div className="flex items-center gap-4"><div className="w-14 h-14 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center"><ScrollText size={28} /></div><div><h2 className="text-lg font-bold text-slate-800">Pesanan Masuk</h2><p className="text-sm text-slate-500 mt-0.5">{stats.orders} Pesanan perlu diproses</p></div></div>
         </button>
-        <button onClick={() => onNavigate('promos')} className="w-full bg-white rounded-2xl p-5 shadow-sm border border-slate-200 flex items-center justify-between hover:shadow-md transition-all active:scale-[0.98] text-left">
-          <div className="flex items-center gap-4"><div className="w-14 h-14 bg-green-100 text-green-600 rounded-xl flex items-center justify-center"><Tag size={28} /></div><div><h2 className="text-lg font-bold text-slate-800">Manajemen Promo</h2><p className="text-sm text-slate-500 mt-0.5">{stats.promos} Promo tersedia</p></div></div>
-        </button>
         <button onClick={() => onNavigate('members')} className="w-full bg-white rounded-2xl p-5 shadow-sm border border-slate-200 flex items-center justify-between hover:shadow-md transition-all active:scale-[0.98] text-left">
           <div className="flex items-center gap-4"><div className="w-14 h-14 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center"><Users size={28} /></div><div><h2 className="text-lg font-bold text-slate-800">Daftar Member</h2><p className="text-sm text-slate-500 mt-0.5">{stats.members} Member terdaftar</p></div></div>
+        </button>
+        <button onClick={() => onNavigate('promos')} className="w-full bg-white rounded-2xl p-5 shadow-sm border border-slate-200 flex items-center justify-between hover:shadow-md transition-all active:scale-[0.98] text-left">
+          <div className="flex items-center gap-4"><div className="w-14 h-14 bg-green-100 text-green-600 rounded-xl flex items-center justify-center"><Tag size={28} /></div><div><h2 className="text-lg font-bold text-slate-800">Manajemen Promo</h2><p className="text-sm text-slate-500 mt-0.5">{stats.promos} Kode voucher</p></div></div>
         </button>
       </div>
     </div>
@@ -709,16 +756,17 @@ function AdminMenuManager({ menus }) {
   const [currentMenu, setCurrentMenu] = useState(null);
 
   const handleAddNew = () => {
-    setCurrentMenu({ id: Date.now(), orderPriority: 99, name: '', desc: '', price: '', image: '', isActive: true, variants: [{ name: '', qty: 0 }] });
+    setCurrentMenu({ name: '', desc: '', price: '', image: '', isActive: true, orderPriority: 99, variants: [{ name: '', qty: 0 }] });
     setIsEditing(true);
   };
 
   const handleSaveMenu = async (savedMenu) => {
-    try {
-      if (savedMenu.dbId) await updateDoc(doc(db, 'menus', savedMenu.dbId), savedMenu);
-      else await addDoc(collection(db, 'menus'), savedMenu);
-      setIsEditing(false);
-    } catch (e) { alert("Error menyimpan menu!"); console.error(e); }
+    if (savedMenu.dbId) {
+      await updateDoc(doc(db, 'menus', savedMenu.dbId), savedMenu);
+    } else { 
+      await addDoc(collection(db, 'menus'), savedMenu); 
+    }
+    setIsEditing(false);
   };
 
   const handleDeleteMenu = async (id) => {
@@ -728,9 +776,9 @@ function AdminMenuManager({ menus }) {
     }
   };
 
-  const handleToggleVisibility = async (id) => {
+  const handleToggleVisibility = async (id, currentStatus) => {
     const target = menus.find(m => (m.dbId || m.id) === id);
-    if (target && target.dbId) await updateDoc(doc(db, 'menus', target.dbId), { isActive: target.isActive === false ? true : false });
+    if (target && target.dbId) await updateDoc(doc(db, 'menus', target.dbId), { isActive: !currentStatus });
   };
 
   if (isEditing) return <AdminMenuForm menu={currentMenu} onSave={handleSaveMenu} onCancel={() => setIsEditing(false)} />;
@@ -743,25 +791,33 @@ function AdminMenuManager({ menus }) {
         {sortedMenus.map(menu => (
           <div key={menu.dbId || menu.id} className={`bg-white p-4 rounded-2xl shadow-sm border ${menu.isActive !== false ? 'border-slate-200' : 'border-dashed border-slate-300 opacity-75'} flex flex-col`}>
             <div className="flex gap-4">
-              <div className="flex flex-col items-center justify-center w-8 bg-slate-50 rounded-lg border border-slate-100 text-slate-400">
-                <GripVertical size={16} className="mb-1 opacity-50" />
-                <span className="text-xs font-bold">{menu.orderPriority || '-'}</span>
-              </div>
-              <div className={`w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center shrink-0 overflow-hidden ${menu.isActive === false ? 'grayscale' : ''}`}>
+              <div className={`w-20 h-20 bg-slate-100 rounded-xl flex items-center justify-center shrink-0 overflow-hidden ${menu.isActive === false ? 'grayscale' : ''}`}>
                 <img src={menu.image} alt={menu.name} className="w-full h-full object-cover" onError={(e) => { e.target.src = 'https://placehold.co/100x100/eeeeee/999999?text=No+Image'; }} />
               </div>
               <div className="flex-1">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
-                  {menu.name} {menu.isActive === false && <span className="bg-slate-200 text-slate-500 text-[10px] px-1.5 py-0.5 rounded-md uppercase font-bold tracking-wider">Hidden</span>}
+                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                  {menu.name}
+                  {menu.isActive === false && <span className="bg-slate-200 text-slate-500 text-[10px] px-1.5 py-0.5 rounded-md uppercase font-bold tracking-wider">Hidden</span>}
                 </h3>
-                <p className="text-xs text-slate-500 font-bold mt-1">{formatRp(menu.price)}</p>
+                <p className="text-sm text-slate-500 font-bold mt-1">{formatRp(menu.price)}</p>
+                <p className="text-xs text-slate-400 mt-1">Urutan: {menu.orderPriority || 99}</p>
               </div>
               <div className="flex flex-col gap-2">
-                <button onClick={() => handleToggleVisibility(menu.dbId || menu.id)} className={`p-1.5 rounded-lg flex items-center justify-center ${menu.isActive !== false ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-500'}`}>
-                  {menu.isActive !== false ? <Eye size={16} /> : <EyeOff size={16} />}
+                <button onClick={() => handleToggleVisibility(menu.dbId || menu.id, menu.isActive !== false)} className={`p-2 rounded-lg ${menu.isActive !== false ? 'bg-green-50 text-green-600' : 'bg-slate-100 text-slate-500'}`}>
+                  {menu.isActive !== false ? <Eye size={18} /> : <EyeOff size={18} />}
                 </button>
-                <button onClick={() => { setCurrentMenu(menu); setIsEditing(true); }} className="p-1.5 flex items-center justify-center bg-blue-50 text-blue-600 rounded-lg"><Edit2 size={16} /></button>
-                <button onClick={() => handleDeleteMenu(menu.dbId || menu.id)} className="p-1.5 flex items-center justify-center bg-red-50 text-red-600 rounded-lg"><Trash2 size={16} /></button>
+                <button onClick={() => { setCurrentMenu(menu); setIsEditing(true); }} className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Edit2 size={18} /></button>
+                <button onClick={() => handleDeleteMenu(menu.dbId || menu.id)} className="p-2 bg-red-50 text-red-600 rounded-lg"><Trash2 size={18} /></button>
+              </div>
+            </div>
+            <div className="mt-4 pt-3 border-t border-slate-100">
+              <p className="text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">Varian & Stok</p>
+              <div className="flex flex-wrap gap-2">
+                {menu.variants.map((v, i) => (
+                  <span key={i} className="bg-slate-100 text-slate-700 text-xs px-2.5 py-1 rounded-md font-medium border border-slate-200">
+                    {v.name} : <strong className={v.qty <= 5 ? 'text-red-500' : 'text-green-600'}>{v.qty}</strong>
+                  </span>
+                ))}
               </div>
             </div>
           </div>
@@ -789,14 +845,10 @@ function AdminMenuForm({ menu, onSave, onCancel }) {
     <div className="flex-1 bg-white overflow-y-auto relative">
       <form onSubmit={handleSubmit} className="p-6 space-y-5 pb-32">
         <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
-          <div><label className="block text-sm font-bold text-slate-700">Tampilkan ke Pelanggan</label><p className="text-xs text-slate-500">Menu ini akan terlihat di aplikasi</p></div>
+          <div><label className="block text-sm font-bold text-slate-700">Tampilkan ke Pelanggan</label><p className="text-xs text-slate-500">Menu terlihat di aplikasi</p></div>
           <button type="button" onClick={() => setFormData({...formData, isActive: formData.isActive === false ? true : false})} className={`w-12 h-6 rounded-full relative transition-colors ${formData.isActive !== false ? 'bg-slate-900' : 'bg-slate-300'}`}>
             <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all ${formData.isActive !== false ? 'left-7' : 'left-1'}`} />
           </button>
-        </div>
-        <div className="flex gap-4">
-          <div className="w-24"><label className="block text-sm font-bold text-slate-700 mb-1">No. Urut</label><input type="number" required value={formData.orderPriority} onChange={e => setFormData({...formData, orderPriority: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 text-center" /></div>
-          <div className="flex-1"><label className="block text-sm font-bold text-slate-700 mb-1">Nama Menu</label><input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900" /></div>
         </div>
         <div>
           <label className="block text-sm font-bold text-slate-700 mb-1">Gambar Menu (URL)</label>
@@ -804,11 +856,15 @@ function AdminMenuForm({ menu, onSave, onCancel }) {
             <div className="w-16 h-16 bg-slate-100 rounded-xl overflow-hidden shrink-0 border border-slate-200 flex items-center justify-center">
                {formData.image ? <img src={formData.image} alt="Preview" className="w-full h-full object-cover" onError={(e) => { e.target.src = 'https://placehold.co/100x100/eeeeee/999999?text=No+Image'; }} /> : <span className="text-slate-400 text-xs">No Img</span>}
             </div>
-            <input required type="url" placeholder="paste img url disini" value={formData.image} onChange={e => setFormData({...formData, image: e.target.value})} className="flex-1 px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 text-sm" />
+            <input required type="url" placeholder="https://..." value={formData.image} onChange={e => setFormData({...formData, image: e.target.value})} className="flex-1 px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 text-sm" />
           </div>
         </div>
-        <div><label className="block text-sm font-bold text-slate-700 mb-1">Deskripsi Singkat</label><textarea required value={formData.desc} onChange={e => setFormData({...formData, desc: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 text-sm" rows={2} /></div>
-        <div><label className="block text-sm font-bold text-slate-700 mb-1">Harga Jual (Rp)</label><input required type="number" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900" /></div>
+        <div><label className="block text-sm font-bold text-slate-700 mb-1">Nama Menu</label><input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900" /></div>
+        <div><label className="block text-sm font-bold text-slate-700 mb-1">Deskripsi</label><textarea required value={formData.desc} onChange={e => setFormData({...formData, desc: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 text-sm" rows={2} /></div>
+        <div className="flex gap-4">
+          <div className="flex-1"><label className="block text-sm font-bold text-slate-700 mb-1">Harga (Rp)</label><input required type="number" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900" /></div>
+          <div className="w-24"><label className="block text-sm font-bold text-slate-700 mb-1">Urutan</label><input required type="number" min="1" value={formData.orderPriority || 99} onChange={e => setFormData({...formData, orderPriority: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-slate-900 text-center" /></div>
+        </div>
         <div className="pt-4 border-t border-slate-200">
           <div className="flex justify-between items-center mb-3"><label className="block text-sm font-bold text-slate-700">Varian & Qty</label><button type="button" onClick={addVariant} className="text-xs bg-slate-900 text-white px-3 py-1.5 rounded-lg flex items-center gap-1"><Plus size={14}/> Tambah</button></div>
           <div className="space-y-3">
@@ -830,7 +886,7 @@ function AdminMenuForm({ menu, onSave, onCancel }) {
   );
 }
 
-function AdminOrderManager({ orders }) {
+function AdminOrderManager({ orders, members }) {
   const [filterName, setFilterName] = useState('');
   const [filterStatus, setFilterStatus] = useState('Semua');
   const [filterDate, setFilterDate] = useState('');
@@ -840,7 +896,23 @@ function AdminOrderManager({ orders }) {
   const handleStatusChange = async (orderId, newStatus) => { 
     const target = orders.find(o => (o.dbId || o.id) === orderId);
     if (target && target.dbId) {
-      try { await updateDoc(doc(db, 'orders', target.dbId), { status: newStatus }); }
+      try { 
+        const updates = { status: newStatus };
+
+        // Tambahkan Poin jika pesanan diubah ke 'Diproses' dan poin belum pernah diberikan
+        if (newStatus === 'Diproses' && !target.isPointsAwarded) {
+          updates.isPointsAwarded = true;
+          
+          const member = members.find(m => m.name === target.customer && m.phone === target.customerPhone);
+          if (member && member.dbId) {
+            await updateDoc(doc(db, 'members', member.dbId), { 
+              points: (member.points || 0) + (target.earnedPoints || 0) 
+            });
+          }
+        }
+
+        await updateDoc(doc(db, 'orders', target.dbId), updates); 
+      }
       catch(e) { console.error(e); }
     }
   };
@@ -850,7 +922,17 @@ function AdminOrderManager({ orders }) {
       const query = filterName.toLowerCase();
       const matchSearch = o.customer.toLowerCase().includes(query) || o.id.toLowerCase().includes(query);
       const matchStatus = filterStatus === 'Semua' || o.status === filterStatus;
-      const matchDate = filterDate === '' || o.date.includes(filterDate);
+      
+      // Logic Filter Tanggal
+      let matchDate = true;
+      if (filterDate !== '') {
+        const [y, m, d] = filterDate.split('-');
+        const idFormat1 = `${d}/${m}/${y}`; // format: 30/05/2026
+        const idFormat2 = `${parseInt(d)}/${parseInt(m)}/${y}`; // format: 30/5/2026 (tanpa nol)
+        
+        matchDate = (o.filterDateKey === filterDate) || (o.date && (o.date.includes(idFormat1) || o.date.includes(idFormat2)));
+      }
+
       return matchSearch && matchStatus && matchDate;
     });
   }, [orders, filterName, filterStatus, filterDate]);
