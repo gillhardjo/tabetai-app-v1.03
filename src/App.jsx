@@ -8,7 +8,6 @@ import {
 
 // --- FIREBASE IMPORTS ---
 import { initializeApp } from 'firebase/app';
-import { getAnalytics } from "firebase/analytics";
 import { 
   getFirestore, collection, doc, addDoc, 
   updateDoc, deleteDoc, onSnapshot 
@@ -24,12 +23,10 @@ const firebaseConfig = {
   storageBucket: "tabetai-app-v103.firebasestorage.app",
   messagingSenderId: "555178920953",
   appId: "1:555178920953:web:96ab92b21b8212c57a0b28",
-  measurementId: "G-6189BCY5YH"
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
 const db = getFirestore(app);
 
 // --- INITIAL SHARED DATA ---
@@ -96,14 +93,18 @@ export default function TabetaiApp() {
   const activeUser = currentUser ? members.find(m => m.phone === currentUser.phone && m.name.toLowerCase() === currentUser.name.toLowerCase()) || currentUser : null;
 
   const handleLogin = (name, phone) => {
-    if (name.toLowerCase() === ADMIN_CREDENTIALS.username.toLowerCase() && phone === ADMIN_CREDENTIALS.phone) {
+    // Bersihkan spasi dari inputan
+    const cleanPhone = phone.trim();
+    const cleanName = name.trim();
+
+    if (cleanName.toLowerCase() === ADMIN_CREDENTIALS.username.toLowerCase() && cleanPhone === ADMIN_CREDENTIALS.phone) {
       setRole('admin');
-      setCurrentUser({ name: 'Admin Tabetai', phone });
+      setCurrentUser({ name: 'Admin Tabetai', phone: cleanPhone });
       setAdminView('dashboard');
       return;
     }
     
-    const existingMember = members.find(m => m.name.toLowerCase() === name.toLowerCase() && m.phone === phone);
+    const existingMember = members.find(m => m.name.toLowerCase() === cleanName.toLowerCase() && m.phone === cleanPhone);
     if (existingMember) {
       setRole('member');
       setCurrentUser(existingMember);
@@ -114,18 +115,21 @@ export default function TabetaiApp() {
   };
 
   const handleRegister = async (name, phone) => {
-    if(name.toLowerCase() === ADMIN_CREDENTIALS.username.toLowerCase()) {
+    const cleanPhone = phone.trim();
+    const cleanName = name.trim();
+
+    if(cleanName.toLowerCase() === ADMIN_CREDENTIALS.username.toLowerCase()) {
       alert('Username ini tidak dapat digunakan.');
       return;
     }
-    const existingMember = members.find(m => m.name.toLowerCase() === name.toLowerCase() && m.phone === phone);
+    const existingMember = members.find(m => m.name.toLowerCase() === cleanName.toLowerCase() && m.phone === cleanPhone);
     if(existingMember) {
       alert('Akun sudah terdaftar. Silakan login.');
       return;
     }
 
     try {
-      const newMemberData = { id: Date.now(), name, phone, points: 0 };
+      const newMemberData = { id: Date.now(), name: cleanName, phone: cleanPhone, points: 0 };
       const res = await addDoc(collection(db, 'members'), newMemberData);
       
       setRole('member');
@@ -190,13 +194,12 @@ export default function TabetaiApp() {
       isStockDeducted: false,
       filterDateKey: isoDate,
       status: 'Menunggu Pembayaran',
-      date: dateObj.toLocaleString('id-ID')
+      date: dateObj.toLocaleString('id-ID'),
+      createdAt: Date.now() // Properti untuk sorting waktu secara akurat
     };
     
     try {
       const res = await addDoc(collection(db, 'orders'), newOrderData);
-      
-      // Poin tidak lagi ditambahkan di sini, tapi saat Admin memproses pesanan
       
       // Optimistic update
       setOrders([{ ...newOrderData, dbId: res.id }, ...orders]);
@@ -676,15 +679,43 @@ function MemberPayment({ onCheckStatus, order, userPhone }) {
 }
 
 function MemberStatus({ orders, onBack, userPhone }) {
+  const [sortOrder, setSortOrder] = useState('Terbaru');
+
+  const sortedOrders = useMemo(() => {
+    return [...orders].sort((a, b) => {
+      const parseDate = (dStr) => {
+        if(!dStr) return 0;
+        const p = dStr.match(/\d+/g);
+        if(p && p.length >= 3) return new Date(p[2], p[1]-1, p[0], p[3]||0, p[4]||0, p[5]||0).getTime();
+        return 0;
+      };
+      const timeA = a.createdAt || parseDate(a.date);
+      const timeB = b.createdAt || parseDate(b.date);
+      return sortOrder === 'Terbaru' ? timeB - timeA : timeA - timeB;
+    });
+  }, [orders, sortOrder]);
+
   return (
     <div className="flex-1 flex flex-col bg-gray-50 relative pb-24">
       <div className="flex items-center p-4 bg-white sticky top-0 z-20 shadow-sm border-b border-gray-100"><button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><ChevronLeft size={24} className="text-gray-700" /></button><h1 className="flex-1 text-center font-bold text-lg text-gray-800 pr-10">Status Pesanan</h1></div>
       <div className="flex-1 overflow-y-auto p-4">
-        {orders.length === 0 ? (
+        
+        {/* FITUR SORTING (MEMBER) */}
+        {orders.length > 0 && (
+          <div className="flex justify-between items-center mb-4 bg-white p-2 rounded-lg border border-gray-100 shadow-sm">
+            <span className="text-sm text-gray-500 font-medium pl-2">Urutkan:</span>
+            <select value={sortOrder} onChange={e=>setSortOrder(e.target.value)} className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none font-medium text-gray-700 focus:border-red-400">
+               <option value="Terbaru">Paling Baru</option>
+               <option value="Terlama">Paling Lama</option>
+            </select>
+          </div>
+        )}
+
+        {sortedOrders.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-400 mt-20"><Store size={64} className="mb-4 opacity-50" /><p>Belum ada riwayat pesanan.</p></div>
         ) : (
           <div className="space-y-4">
-            {orders.map((order, index) => (
+            {sortedOrders.map((order, index) => (
               <div key={order.dbId || order.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 relative overflow-hidden">
                 <div className={`absolute top-0 left-0 w-1.5 h-full ${order.status === 'Selesai' ? 'bg-green-500' : order.status === 'Diproses' ? 'bg-blue-500' : 'bg-orange-500'}`} />
                 <div className="flex justify-between items-start mb-3">
@@ -891,6 +922,7 @@ function AdminOrderManager({ orders, members, menus }) {
   const [filterName, setFilterName] = useState('');
   const [filterStatus, setFilterStatus] = useState('Semua');
   const [filterDate, setFilterDate] = useState('');
+  const [sortOrder, setSortOrder] = useState('Terbaru');
 
   const STATUS_OPTIONS = ['Menunggu Pembayaran', 'Diproses', 'Selesai', 'Dibatalkan'];
   
@@ -943,7 +975,7 @@ function AdminOrderManager({ orders, members, menus }) {
   };
 
   const filteredOrders = useMemo(() => {
-    return orders.filter(o => {
+    let result = orders.filter(o => {
       const query = filterName.toLowerCase();
       const matchSearch = o.customer.toLowerCase().includes(query) || o.id.toLowerCase().includes(query);
       const matchStatus = filterStatus === 'Semua' || o.status === filterStatus;
@@ -960,12 +992,30 @@ function AdminOrderManager({ orders, members, menus }) {
 
       return matchSearch && matchStatus && matchDate;
     });
-  }, [orders, filterName, filterStatus, filterDate]);
+
+    // Logic Urutkan Berdasarkan Tanggal/Waktu
+    result.sort((a, b) => {
+      const parseDate = (dStr) => {
+        if(!dStr) return 0;
+        // Ekstrak angka dari string tanggal (menangani format DD/MM/YYYY HH:MM:SS)
+        const p = dStr.match(/\d+/g);
+        if(p && p.length >= 3) return new Date(p[2], p[1]-1, p[0], p[3]||0, p[4]||0, p[5]||0).getTime();
+        return 0;
+      };
+      
+      const timeA = a.createdAt || parseDate(a.date);
+      const timeB = b.createdAt || parseDate(b.date);
+      
+      return sortOrder === 'Terbaru' ? timeB - timeA : timeA - timeB;
+    });
+
+    return result;
+  }, [orders, filterName, filterStatus, filterDate, sortOrder]);
 
   return (
     <div className="flex-1 overflow-y-auto flex flex-col">
       <div className="bg-white p-4 border-b border-slate-200 shadow-sm space-y-3 z-10 sticky top-0">
-        <div className="flex items-center gap-2 text-slate-700 font-bold text-sm mb-1"><Filter size={16} /> Filter Pesanan</div>
+        <div className="flex items-center gap-2 text-slate-700 font-bold text-sm mb-1"><Filter size={16} /> Filter & Urutkan Pesanan</div>
         <div className="flex gap-2">
            <div className="relative flex-1">
              <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
@@ -973,10 +1023,16 @@ function AdminOrderManager({ orders, members, menus }) {
            </div>
            <input type="date" value={filterDate} onChange={e=>setFilterDate(e.target.value)} className="w-32 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-slate-400" />
         </div>
-        <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-slate-400">
-           <option value="Semua">Semua Status</option>
-           {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
+        <div className="flex gap-2">
+          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="w-1/2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-slate-400">
+             <option value="Semua">Semua Status</option>
+             {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select value={sortOrder} onChange={e=>setSortOrder(e.target.value)} className="w-1/2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm outline-none focus:border-slate-400">
+             <option value="Terbaru">Terbaru Pertama</option>
+             <option value="Terlama">Terlama Pertama</option>
+          </select>
+        </div>
       </div>
 
       <div className="p-4 space-y-4">
