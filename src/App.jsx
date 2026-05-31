@@ -177,12 +177,19 @@ export default function TabetaiApp() {
   const placeOrder = async (finalTotal, discountObj) => {
     const earnedPoints = Math.floor(finalTotal * 0.1); 
     
-    // Simpan kunci format tanggal standar untuk memudahkan filter admin
+    // Format Tanggal
     const dateObj = new Date();
     const isoDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+    
+    // --- MEMBUAT ORDER ID BERURUTAN ---
+    // Format: APP-XXXX (Contoh: APP-0001, APP-0002)
+    const totalOrdersCount = orders.length;
+    const nextSequence = String(totalOrdersCount + 1).padStart(4, '0'); // Mulai dari 0001, 4 digit
+    
+    const generatedOrderId = `APP-${nextSequence}`;
 
     const newOrderData = {
-      id: `TBT-${Math.floor(Math.random() * 10000)}`,
+      id: generatedOrderId,
       customer: activeUser.name,
       customerPhone: activeUser.phone,
       items: [...cart],
