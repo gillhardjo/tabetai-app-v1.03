@@ -177,9 +177,13 @@ export default function TabetaiApp() {
   const placeOrder = async (finalTotal, discountObj) => {
     const earnedPoints = Math.floor(finalTotal * 0.1); 
     
-    // Format Tanggal
+    // Format Tanggal dan Waktu (HH:MM)
     const dateObj = new Date();
     const isoDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+    
+    const formattedDate = `${String(dateObj.getDate()).padStart(2, '0')}/${String(dateObj.getMonth() + 1).padStart(2, '0')}/${dateObj.getFullYear()}`;
+    const formattedTime = `${String(dateObj.getHours()).padStart(2, '0')}:${String(dateObj.getMinutes()).padStart(2, '0')}`;
+    const finalDateTime = `${formattedDate}, ${formattedTime}`;
     
     // --- MEMBUAT ORDER ID BERURUTAN ---
     // Format: APP-XXXX (Contoh: APP-0001, APP-0002)
@@ -201,7 +205,7 @@ export default function TabetaiApp() {
       isStockDeducted: false,
       filterDateKey: isoDate,
       status: 'Menunggu Pembayaran',
-      date: dateObj.toLocaleString('id-ID'),
+      date: finalDateTime,
       createdAt: Date.now() // Properti untuk sorting waktu secara akurat
     };
     
