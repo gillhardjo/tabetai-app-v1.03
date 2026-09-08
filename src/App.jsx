@@ -451,10 +451,13 @@ function MemberAppView({ user, menus, orders, promos, onLogout, showToast }) {
           showToast("Menghubungkan ke server pembayaran...", "info");
           
           try {
-             // Memanggil API Backend (Ganti localhost dengan URL server Anda jika sudah di-hosting)
-             const response = await fetch('http://localhost:3001/api/payment', {
+             // Memanggil API Backend melalui URL Ngrok
+             const response = await fetch('https://facedown-bunkbed-snowplow.ngrok-free.dev/api/payment', {
                  method: 'POST',
-                 headers: { 'Content-Type': 'application/json' },
+                 headers: { 
+                     'Content-Type': 'application/json',
+                     'ngrok-skip-browser-warning': 'true' // Melewati halaman peringatan Ngrok
+                 },
                  body: JSON.stringify({ 
                      orderId: orderId, 
                      grossAmount: finalTotal, 
@@ -1191,11 +1194,14 @@ function AdminPOSView({ menus, orders, members, promos, savedBills, onLogout, sh
           
           try {
               /* ==============================================
-               * Ganti localhost dengan URL Server Node.js Anda jika sudah live!
+               * Memanggil API Backend melalui URL Ngrok
                * ============================================== */
-              const response = await fetch('http://localhost:3001/api/payment', {
+              const response = await fetch('https://facedown-bunkbed-snowplow.ngrok-free.dev/api/payment', {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: { 
+                      'Content-Type': 'application/json',
+                      'ngrok-skip-browser-warning': 'true' // Melewati halaman peringatan Ngrok
+                  },
                   body: JSON.stringify({ 
                       orderId: id, 
                       grossAmount: calculateTotal(), 
