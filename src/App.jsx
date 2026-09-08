@@ -1,13 +1,16 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   ShoppingCart, MessageCircle, ChevronLeft, Plus, Minus, X, Download, Clock, Store, 
-  User, Phone, Users, ScrollText, Edit2, Save, Trash2, LogOut, Eye, EyeOff, Tag, Search, Filter, CheckCircle, ChefHat, FolderOpen, Database, Banknote, QrCode, Image as ImageIcon, UtensilsCrossed, Printer, Menu as MenuIcon, BarChart3, Calendar, TrendingUp, Box, Layers
+  User, Phone, Users, ScrollText, Edit2, Save, Trash2, LogOut, Eye, EyeOff, Tag, Search, Filter, CheckCircle, ChefHat, FolderOpen, Database, Banknote, QrCode, Image as ImageIcon, UtensilsCrossed, Printer, Menu as MenuIcon, BarChart3, Calendar, TrendingUp, Box, Layers, RefreshCw
 } from 'lucide-react';
 
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 import { collection, doc, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, initializeFirestore } from 'firebase/firestore';
 
+// ==========================================
+// 1. FIREBASE CONFIGURATION
+// ==========================================
 const firebaseConfig = {
   apiKey: "AIzaSyAwsfBMS0_9gbPayYU-Ry2iFNfF8TMMKVU",
   authDomain: "tabetai-app-v103.firebaseapp.com",
@@ -39,10 +42,18 @@ const getDocRef = (colName, docId) => {
   return doc(db, name, docId);
 };
 
+// ==========================================
+// CONSTANTS & UTILS
+// ==========================================
 const ADMIN_CREDENTIALS = { username: 'admin', phone: '2131' };
 const ADMIN_WA_NUMBER = "6281285557779"; 
-const qrisImageUrl = "https://github.com/gillhardjo/tabetai-app/blob/main/public/qris.png?raw=true";
+const staticQrisImageUrl = "https://github.com/gillhardjo/tabetai-app/blob/main/public/qris.png?raw=true";
 const logoImageUrl = "https://github.com/gillhardjo/tabetai-app/blob/main/public/logo.png?raw=true";
+
+// --- KONFIGURASI MIDTRANS (HANYA CLIENT KEY) ---
+// Key ini dimasukkan ke Frontend agar Pop-up Snap Midtrans bisa terbuka.
+const MIDTRANS_CLIENT_KEY = "Mid-client-Ly1cM6XkZH8X3fW6"; 
+// -----------------------------------------------
 
 const formatRp = (angka) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(angka || 0);
 
@@ -128,6 +139,9 @@ const generateInvoiceWAUrl = (order, userPhone) => {
   return `https://wa.me/${waNumber}?text=${text}`;
 };
 
+// ==========================================
+// MAIN APP COMPONENT (ROOT)
+// ==========================================
 export default function App() {
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [authError, setAuthError] = useState(null);
@@ -143,6 +157,22 @@ export default function App() {
     const saved = localStorage.getItem('tbt_user');
     return saved ? JSON.parse(saved) : null;
   });
+
+  // --- MEMASUKKAN SCRIPT MIDTRANS SNAP (PRODUCTION) ---
+  useEffect(() => {
+    const script = document.createElement('script');
+    // Karena Key Anda TIDAK memiliki awalan SB-, ini adalah key Production
+    script.src = "https://app.midtrans.com/snap/snap.js"; 
+    script.setAttribute('data-client-key', MIDTRANS_CLIENT_KEY);
+    script.async = true;
+
+    document.body.appendChild(script);
+
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
+  // ----------------------------------------
 
   useEffect(() => {
     localStorage.setItem('tbt_role', role);
@@ -238,6 +268,9 @@ export default function App() {
   );
 }
 
+// ==========================================
+// 1. GUEST VIEW
+// ==========================================
 function GuestView({ onLogin, onRegister }) {
   const [view, setView] = useState('login');
   const [name, setName] = useState('');
@@ -291,6 +324,9 @@ function GuestView({ onLogin, onRegister }) {
   );
 }
 
+// ==========================================
+// 2. MEMBER APP VIEW (Customer)
+// ==========================================
 function MemberAppView({ user, menus, orders, promos, onLogout, showToast }) {
   const [view, setView] = useState('home'); 
   
@@ -359,7 +395,7 @@ function MemberAppView({ user, menus, orders, promos, onLogout, showToast }) {
     }).filter(i => i.quantity > 0));
   };
 
-  const placeOrder = async (finalTotal, discountObj) => {
+  const placeOrder = async (finalTotal, discountObj, paymentMethod = 'Midtrans') => {
     if (isPlacingOrder) return;
     setIsPlacingOrder(true);
     
@@ -389,7 +425,7 @@ function MemberAppView({ user, menus, orders, promos, onLogout, showToast }) {
       isPointsAwarded: false,
       isStockDeducted: false,
       status: 'Menunggu Konfirmasi',
-      payment: 'QRIS / Transfer',
+      payment: paymentMethod,
       time: timeStr,
       date: dateObj.toLocaleString('id-ID'),
       filterDateKey: `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`,
@@ -410,8 +446,62 @@ function MemberAppView({ user, menus, orders, promos, onLogout, showToast }) {
       }
 
       setCart([]);
-      setView('payment');
-      showToast("Pesanan berhasil dibuat!", "success");
+      
+      if (paymentMethod === 'Midtrans') {
+          showToast("Menghubungkan ke server pembayaran...", "info");
+          
+          try {
+             // Memanggil API Backend (Ganti localhost dengan URL server Anda jika sudah di-hosting)
+             const response = await fetch('http://localhost:3001/api/payment', {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({ 
+                     orderId: orderId, 
+                     grossAmount: finalTotal, 
+                     customerName: user.name,
+                     customerPhone: user.phone
+                 })
+             });
+             
+             if (!response.ok) throw new Error("Gagal mendapatkan token pembayaran");
+             const data = await response.json();
+             const snapToken = data.token; 
+
+             if (window.snap) {
+                 window.snap.pay(snapToken, {
+                     onSuccess: function(result){
+                         updateDoc(getDocRef('transactions', orderId), { status: 'Pembayaran Diterima' });
+                         setView('payment');
+                         showToast("Pembayaran Berhasil!", "success");
+                     },
+                     onPending: function(result){
+                         setView('payment');
+                         showToast("Menunggu pembayaran diselesaikan", "info");
+                     },
+                     onError: function(result){
+                         setView('payment');
+                         showToast("Pembayaran Midtrans gagal atau dibatalkan", "error");
+                     },
+                     onClose: function(){
+                         setView('status');
+                         showToast("Anda menutup pop-up pembayaran", "info");
+                     }
+                 });
+             } else {
+                showToast("Sistem Midtrans gagal dimuat, silakan muat ulang", "error");
+                setView('status');
+             }
+          } catch(err) {
+             showToast(err.message, "error");
+             setView('status');
+          }
+
+      } else {
+         // Pembayaran Tunai
+         setView('payment');
+         showToast("Pesanan berhasil dibuat!", "success");
+      }
+
     } catch (e) {
       showToast("Gagal memproses pesanan.", "error");
     } finally {
@@ -539,7 +629,7 @@ function MemberAppView({ user, menus, orders, promos, onLogout, showToast }) {
       )}
 
       {view === 'payment' && myOrders[0] && (
-        <MemberPayment order={myOrders[0]} userPhone={user.phone} onCheckStatus={() => setView('status')} onBackHome={() => setView('home')} formatRp={formatRp} />
+        <MemberPayment order={myOrders[0]} userPhone={user.phone} onCheckStatus={() => setView('status')} onBackHome={() => setView('home')} formatRp={formatRp} showToast={showToast} />
       )}
 
       {view === 'status' && (
@@ -641,6 +731,7 @@ function MemberHome({ user, menus = [], onNavigate, promos, formatRp, onClaimPro
 function MemberCheckout({ cart, onBack, updateQty, subtotal, onPay, promos, formatRp, showToast, userPhone, isPlacingOrder, defaultPromoCode, clearClaimedPromo }) {
   const [promoCode, setPromoCode] = useState(defaultPromoCode || '');
   const [appliedPromo, setAppliedPromo] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState('Midtrans'); 
 
   useEffect(() => {
     if (defaultPromoCode) {
@@ -725,6 +816,20 @@ function MemberCheckout({ cart, onBack, updateQty, subtotal, onPay, promos, form
             <button onClick={applyPromo} className="bg-slate-900 text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-slate-800">Pakai</button>
           </div>
         </div>
+        
+        {/* Pilihan Metode Pembayaran Midtrans di Customer App */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 mb-6">
+          <h2 className="font-bold text-slate-800 text-sm mb-3">Metode Pembayaran</h2>
+          <div className="grid grid-cols-2 gap-3">
+             <button onClick={() => setPaymentMethod('Midtrans')} className={`py-3 rounded-xl border-2 font-bold text-sm flex items-center justify-center gap-2 transition-colors ${paymentMethod === 'Midtrans' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                Online (QRIS/Transfer/E-Wallet)
+             </button>
+             <button onClick={() => setPaymentMethod('Tunai / Kasir')} className={`py-3 rounded-xl border-2 font-bold text-sm flex items-center justify-center gap-2 transition-colors ${paymentMethod === 'Tunai / Kasir' ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                <Banknote size={18} /> Bayar di Kasir
+             </button>
+          </div>
+        </div>
+
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
           <h2 className="font-bold text-slate-800 text-sm mb-3">Ringkasan Pembayaran</h2>
           <div className="space-y-2 text-sm text-slate-600">
@@ -738,41 +843,60 @@ function MemberCheckout({ cart, onBack, updateQty, subtotal, onPay, promos, form
       <div className="absolute bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-100 shadow-[0_-10px_40px_rgba(0,0,0,0.08)]">
         <button 
           disabled={isPlacingOrder || cart.length === 0}
-          onClick={() => onPay(finalTotal, appliedPromo ? { code: appliedPromo.code, value: discountAmount, dbId: appliedPromo.dbId } : null)} 
+          onClick={() => onPay(finalTotal, appliedPromo ? { code: appliedPromo.code, value: discountAmount, dbId: appliedPromo.dbId } : null, paymentMethod)} 
           className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-xl flex justify-center items-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
         >
-          {isPlacingOrder ? "Memproses Pesanan..." : "Lanjut Pembayaran"}
+          {isPlacingOrder ? "Memproses Pesanan..." : "Pesan Sekarang"}
         </button>
       </div>
     </div>
   );
 }
 
-function MemberPayment({ onCheckStatus, onBackHome, order, userPhone, formatRp }) {
+function MemberPayment({ onCheckStatus, onBackHome, order, userPhone, formatRp, showToast }) {
   const handleConfirmWA = () => {
     let waNumber = ADMIN_WA_NUMBER.replace(/[^\d+]/g, ''); 
-    const text = `Halo Admin Tabetai, saya ${order.customer} sudah melakukan pembayaran via QRIS untuk Order ID: ${order.id} sebesar *${formatRp(order.total)}*. Mohon dicek ya!`;
+    const text = `Halo Admin Tabetai, saya ${order.customer} sudah melakukan pesanan untuk Order ID: ${order.id} sebesar *${formatRp(order.total)}*. Mohon dicek ya!`;
     window.open(`https://wa.me/${waNumber}?text=${encodeURIComponent(text)}`, '_blank');
   };
 
+  const isTunai = order.payment && order.payment.includes('Tunai');
+
   return (
     <div className="flex-1 flex flex-col bg-white">
-      <div className="p-4 bg-white flex items-center border-b border-slate-100"><h1 className="flex-1 text-center font-bold text-lg">Pembayaran</h1></div>
-      <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center">
-        <p className="text-slate-500 text-sm mb-1">Total Tagihan</p><p className="text-3xl font-black text-slate-800 mb-8">{formatRp(order.total)}</p>
-        <div className="bg-white p-4 rounded-3xl shadow-xl border border-slate-100 mb-6 w-full max-w-[260px] relative">
-          <img 
-            src={qrisImageUrl} 
-            alt="QRIS" 
-            className="w-full object-contain" 
-            onError={(e) => { e.target.src = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=QRIS_BELUM_DISET'; }} 
-          />
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-red-600 text-white px-4 py-1 rounded-full text-xs font-bold">QRIS TABETAI</div>
-        </div>
+      <div className="p-4 bg-white flex items-center border-b border-slate-100"><h1 className="flex-1 text-center font-bold text-lg">Status Transaksi</h1></div>
+      <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center text-center">
+        
+        {/* Status Realtime Checker */}
+        {order.status === 'Pembayaran Diterima' || order.status === 'Diproses' || order.status === 'Selesai' ? (
+          <div className="w-full bg-green-50 border border-green-200 text-green-700 p-4 rounded-2xl mb-6 flex flex-col items-center animate-in zoom-in">
+             <CheckCircle size={40} className="mb-2 text-green-600" />
+             <h2 className="font-bold text-lg">Pembayaran Berhasil!</h2>
+             <p className="text-sm mt-1">Pesanan Anda sedang {order.status.toLowerCase()}.</p>
+          </div>
+        ) : (
+          <div className="w-full bg-blue-50 border border-blue-200 text-blue-700 p-4 rounded-2xl mb-6 flex items-center justify-center gap-3">
+             <RefreshCw size={20} className="animate-spin" />
+             <p className="text-sm font-semibold">Menunggu konfirmasi admin/pembayaran...</p>
+          </div>
+        )}
+
+        <p className="text-slate-500 text-sm mb-1">Total Tagihan ({order.payment})</p>
+        <p className="text-3xl font-black text-slate-800 mb-8">{formatRp(order.total)}</p>
+
+        {isTunai && (
+            <div className="bg-orange-50 border border-orange-200 p-6 rounded-3xl mb-8 w-full">
+                <Banknote size={48} className="mx-auto text-orange-400 mb-3" />
+                <h3 className="font-bold text-orange-800 mb-2">Pembayaran Tunai</h3>
+                <p className="text-sm text-orange-700">Silakan tunjukkan layar ini kepada kasir dan lakukan pembayaran secara tunai di meja kasir.</p>
+            </div>
+        )}
+
         <button onClick={() => window.open(generateInvoiceWAUrl(order, userPhone), '_blank')} className="text-blue-600 font-semibold bg-blue-50 py-3 px-6 rounded-xl text-sm mb-10 flex gap-2"><ScrollText size={16} /> Download Invoice</button>
+        
         <div className="w-full mt-auto space-y-3">
-          <button onClick={handleConfirmWA} className="w-full bg-green-500 text-white font-bold py-4 rounded-xl flex justify-center gap-2"><MessageCircle size={20} /> Konfirmasi pesanan via WA</button>
-          <button onClick={onCheckStatus} className="w-full bg-slate-900 text-white font-bold py-4 rounded-xl">Cek Status Pesanan</button>
+          <button onClick={handleConfirmWA} className="w-full bg-green-500 text-white font-bold py-4 rounded-xl flex justify-center gap-2 shadow-lg"><MessageCircle size={20} /> Konfirmasi Manual via WA</button>
+          <button onClick={onCheckStatus} className="w-full bg-slate-900 text-white font-bold py-4 rounded-xl">Lihat Status Pesanan</button>
           <button onClick={onBackHome} className="w-full bg-slate-100 text-slate-800 font-bold py-4 rounded-xl mt-2">Kembali ke Beranda</button>
         </div>
       </div>
@@ -875,6 +999,9 @@ function VariantModal({ item, onClose, onAdd, formatRp }) {
   );
 }
 
+// ==========================================
+// 3. ADMIN POS VIEW
+// ==========================================
 function AdminPOSView({ menus, orders, members, promos, savedBills, onLogout, showToast }) {
   const [activeTab, setActiveTab] = useState('kasir'); 
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -1035,11 +1162,13 @@ function AdminPOSView({ menus, orders, members, promos, savedBills, onLogout, sh
       total: calculateTotal(),
       originalTotal: calculateSubtotal(),
       discount: appliedPromo ? { code: appliedPromo.code, value: discountAmount, dbId: appliedPromo.dbId } : null,
-      status: "Diproses", payment: paymentMethod, 
-      isStockDeducted: true,
+      status: paymentMethod === 'Cash' ? "Selesai" : "Menunggu Konfirmasi", 
+      payment: paymentMethod, 
+      isStockDeducted: paymentMethod === 'Cash', 
       time: timeStr,
       date: new Date().toLocaleString('id-ID'), timestamp: Date.now()
     };
+
     try {
       await setDoc(getDocRef('transactions', id), newTrx);
       
@@ -1052,11 +1181,57 @@ function AdminPOSView({ menus, orders, members, promos, savedBills, onLogout, sh
         }
       }
 
-      await deductStockForOrder(cart);
+      if (paymentMethod === 'Cash') {
+          await deductStockForOrder(cart);
+          setCart([]); setPromoCode(""); setAppliedPromo(null); setPaymentMethod(''); setCashAmount(''); setCheckoutModal(false); setActiveBill(null);
+          showToast("Pembayaran Tunai Berhasil!", "success");
+      } else if (paymentMethod === 'Midtrans') {
+          // LOGIKA MIDTRANS KASIR ADMIN
+          showToast("Memanggil Midtrans...", "info");
+          
+          try {
+              /* ==============================================
+               * Ganti localhost dengan URL Server Node.js Anda jika sudah live!
+               * ============================================== */
+              const response = await fetch('http://localhost:3001/api/payment', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ 
+                      orderId: id, 
+                      grossAmount: calculateTotal(), 
+                      customerName: activeBill ? activeBill.name : 'Walk-in',
+                      customerPhone: activeBill ? activeBill.phone : ''
+                  })
+              });
+              
+              if (!response.ok) throw new Error("Gagal mendapatkan token dari server");
+              const data = await response.json();
+              const snapToken = data.token;
 
-      setCart([]); setPromoCode(""); setAppliedPromo(null); setPaymentMethod(''); setCashAmount(''); setCheckoutModal(false); setActiveBill(null);
-      showToast("Pembayaran Berhasil! Struk siap dicetak.", "success");
-    } catch (e) { showToast("Gagal memproses pembayaran", "error"); }
+              if (window.snap) {
+                  window.snap.pay(snapToken, {
+                      onSuccess: function(result){
+                          updateDoc(getDocRef('transactions', id), { status: 'Pembayaran Diterima' });
+                          setCart([]); setPromoCode(""); setAppliedPromo(null); setPaymentMethod(''); setCashAmount(''); setCheckoutModal(false); setActiveBill(null);
+                          showToast("Pembayaran Midtrans Berhasil!", "success");
+                      },
+                      onPending: function(result){
+                          setCart([]); setPromoCode(""); setAppliedPromo(null); setPaymentMethod(''); setCashAmount(''); setCheckoutModal(false); setActiveBill(null);
+                          showToast("Menunggu pembayaran Midtrans diselesaikan", "info");
+                      },
+                      onError: function(result){
+                          showToast("Pembayaran Midtrans gagal", "error");
+                      },
+                      onClose: function(){
+                          showToast("Pop-up pembayaran ditutup", "info");
+                      }
+                  });
+              } else {
+                 showToast("Sistem Midtrans tidak termuat dengan benar", "error");
+              }
+          } catch (e) { showToast("Gagal memproses pembayaran: " + e.message, "error"); }
+      }
+    } catch (e) { showToast("Gagal memproses transaksi", "error"); }
   };
 
   const handleSaveBill = async () => {
@@ -1275,24 +1450,14 @@ function AdminPOSView({ menus, orders, members, promos, savedBills, onLogout, sh
               <div className="p-6 text-center"><p className="text-sm text-slate-500 mb-1">Total</p><p className="text-4xl font-black text-red-600 mb-6">{formatRp(calculateTotal())}</p>
                 <div className="grid grid-cols-2 gap-3 mb-6">
                   <button onClick={() => setPaymentMethod('Cash')} className={`py-4 rounded-2xl font-bold border-2 flex flex-col items-center gap-2 ${paymentMethod==='Cash'?'border-red-500 bg-red-50 text-red-700':'border-slate-200 text-slate-500'}`}><Banknote size={28} /> Tunai</button>
-                  <button onClick={() => setPaymentMethod('QRIS')} className={`py-4 rounded-2xl font-bold border-2 flex flex-col items-center gap-2 ${paymentMethod==='QRIS'?'border-red-500 bg-red-50 text-red-700':'border-slate-200 text-slate-500'}`}><QrCode size={28} /> QRIS</button>
+                  <button onClick={() => setPaymentMethod('Midtrans')} className={`py-4 rounded-2xl font-bold border-2 flex flex-col items-center gap-2 ${paymentMethod==='Midtrans'?'border-blue-500 bg-blue-50 text-blue-700':'border-slate-200 text-slate-500'}`}><QrCode size={28} /> Midtrans Online</button>
                 </div>
                 {paymentMethod === 'Cash' && (
                   <input type="text" value={cashAmount} onChange={(e) => { const v=e.target.value.replace(/\D/g,''); setCashAmount(v?parseInt(v).toLocaleString('id-ID'):''); }} className="w-full p-4 bg-slate-50 border-2 rounded-2xl font-bold text-xl text-center mb-4" placeholder="Nominal Uang" />
                 )}
-                {paymentMethod === 'QRIS' && (
-                  <div className="mb-6 flex justify-center">
-                    <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 w-48 relative">
-                      <img 
-                        src={qrisImageUrl} 
-                        alt="QRIS" 
-                        className="w-full object-contain" 
-                        onError={(e) => { e.target.src = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=QRIS_BELUM_DISET'; }} 
-                      />
-                    </div>
-                  </div>
-                )}
-                <button onClick={handleCheckout} className="w-full py-4 bg-red-600 text-white rounded-2xl font-black text-lg">Proses</button>
+                <button onClick={handleCheckout} className="w-full py-4 bg-red-600 text-white rounded-2xl font-black text-lg">
+                  {paymentMethod === 'Midtrans' ? 'Buat Link Midtrans' : 'Proses Tunai'}
+                </button>
               </div>
             </div>
           </div>
@@ -1342,7 +1507,7 @@ function AdminPOSView({ menus, orders, members, promos, savedBills, onLogout, sh
         )}
 
         {activeTab === 'laporan' && <AdminReportManager orders={orders} menus={menus} formatRp={formatRp} />}
-        {activeTab === 'pesanan' && <AdminOrderManager orders={orders} members={members} menus={menus} promos={promos} db={db} formatRp={formatRp} showToast={showToast} onPrint={handlePrintReceipt} deductStockForOrder={deductStockForOrder} />}
+        {activeTab === 'pesanan' && <AdminOrderManager orders={orders} members={members} menus={menus} promos={promos} db={db} formatRp={formatRp} showToast={showToast} onPrint={handlePrintReceipt} deductStockForOrder={deductStockForOrder} staticQris={staticQrisImageUrl} />}
         {activeTab === 'openbill' && <AdminOpenBill savedBills={savedBills} db={db} handleLoadBill={(b) => { setCart(b.items); setActiveBill({id: b.dbId, name: b.name, phone: b.phone}); setActiveTab('kasir'); }} showToast={showToast} />}
         {activeTab === 'menu' && <AdminMenuManager menus={menus} db={db} formatRp={formatRp} showToast={showToast} getMenuHPP={getMenuHPP} />}
         {activeTab === 'members' && <AdminMemberManager members={members} db={db} showToast={showToast} />}
@@ -1358,7 +1523,7 @@ function AdminPOSView({ menus, orders, members, promos, savedBills, onLogout, sh
 }
 
 function AdminReportManager({ orders, menus, formatRp }) {
-  const [filterType, setFilterType] = useState('today'); // today, week, month, custom
+  const [filterType, setFilterType] = useState('today'); 
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   
@@ -1374,7 +1539,7 @@ function AdminReportManager({ orders, menus, formatRp }) {
       start.setHours(0, 0, 0, 0);
       end.setHours(23, 59, 59, 999);
     } else if (filterType === 'week') {
-      const first = now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1); // Monday
+      const first = now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1); 
       start = new Date(now.setDate(first));
       start.setHours(0, 0, 0, 0);
       end = new Date(start);
@@ -1407,7 +1572,7 @@ function AdminReportManager({ orders, menus, formatRp }) {
 
     filteredOrders.forEach(order => {
        grossSales += (order.originalTotal || order.total);
-       netSales += order.total; // after discount
+       netSales += order.total; 
        
        const orderDate = order.date ? order.date.split(',')[0].trim() : new Date(order.timestamp).toLocaleDateString('id-ID');
 
@@ -1482,7 +1647,6 @@ function AdminReportManager({ orders, menus, formatRp }) {
           csvRows.push(row.join(','));
       });
       
-      // Tambahkan ringkasan total margin di bagian bawah CSV
       csvRows.push('');
       csvRows.push('RINGKASAN PENJUALAN KESELURUHAN');
       csvRows.push(`Penjualan Kotor,${reportMetrics.grossSales}`);
@@ -1608,7 +1772,7 @@ function AdminReportManager({ orders, menus, formatRp }) {
   );
 }
 
-function AdminOrderManager({ orders, members, menus, promos, db, formatRp, showToast, onPrint, deductStockForOrder }) {
+function AdminOrderManager({ orders, members, menus, promos, db, formatRp, showToast, onPrint, deductStockForOrder, staticQris }) {
   const STATUS_OPTIONS = ['Menunggu Konfirmasi', 'Pembayaran Diterima', 'Diproses', 'Selesai', 'Dibatalkan'];
   
   const [searchQuery, setSearchQuery] = useState("");
@@ -1759,18 +1923,22 @@ function AdminOrderManager({ orders, members, menus, promos, db, formatRp, showT
                 )}
                 <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
                   <div>
-                    <p className="font-bold text-lg">{order.id} <span className="text-slate-400 text-sm ml-2">{order.time} {order.date && `• ${order.date.split(',')[0]}`}</span></p>
+                    <div className="flex items-center gap-2">
+                       <p className="font-bold text-lg">{order.id}</p>
+                       {order.payment === 'Midtrans' && <span className="bg-blue-100 text-blue-700 text-[10px] px-2 py-0.5 rounded font-bold uppercase border border-blue-200">Online</span>}
+                    </div>
+                    <p className="text-slate-400 text-xs mb-1">{order.time} {order.date && `• ${order.date.split(',')[0]}`}</p>
                     <p className="text-sm font-semibold text-red-600">{order.customer}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 md:gap-3">
                     <button onClick={() => toggleOrderDetails(order.dbId)} className="p-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg flex items-center gap-2 text-sm font-bold shadow-sm transition-colors">
                       {expandedOrders[order.dbId] ? <ChevronLeft className="rotate-90" size={18}/> : <ChevronLeft className="-rotate-90" size={18}/>}
-                      {expandedOrders[order.dbId] ? 'Tutup' : 'Buka Pesanan'}
+                      {expandedOrders[order.dbId] ? 'Tutup' : 'Buka'}
                     </button>
                     <button onClick={() => onPrint(order)} className="p-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg flex items-center gap-2 text-sm font-bold shadow-sm">
                       <Printer size={18}/> Cetak
                     </button>
-                    <select value={order.status} onChange={(e) => handleStatusChange(order.dbId, e.target.value)} className="p-2 border rounded-xl bg-slate-50 font-bold text-sm">
+                    <select value={order.status} onChange={(e) => handleStatusChange(order.dbId, e.target.value)} className={`p-2 border rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-200 ${order.status === 'Pembayaran Diterima' || order.status === 'Diproses' ? 'bg-green-50 border-green-200 text-green-800' : 'bg-slate-50'}`}>
                       {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                     <button onClick={()=>deleteDoc(getDocRef('transactions', order.dbId))} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={20}/></button>
@@ -1779,6 +1947,17 @@ function AdminOrderManager({ orders, members, menus, promos, db, formatRp, showT
 
                 {expandedOrders[order.dbId] && (
                   <div className="mt-2 pt-4 border-t border-slate-100 animate-in fade-in slide-in-from-top-2">
+                    
+                    {/* Tampilkan Ulang status Online bagi Kasir jika pelanggan belum bayar */}
+                    {order.payment === 'Midtrans' && order.status === 'Menunggu Konfirmasi' && (
+                        <div className="mb-4 bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-center gap-4">
+                             <div>
+                                  <h4 className="font-bold text-sm text-slate-800 mb-1">Menunggu Pembayaran Online (Midtrans)</h4>
+                                  <p className="text-xs text-slate-500">Sistem menunggu pelanggan menyelesaikan pembayaran melalui perangkat mereka. Status akan berubah otomatis saat berhasil.</p>
+                             </div>
+                        </div>
+                    )}
+
                     <h4 className="font-bold text-slate-800 text-sm mb-3">Daftar Item:</h4>
                     <div className="space-y-2 mb-4">
                       {order.items.map((item, idx) => (
@@ -2267,18 +2446,8 @@ function AdminMenuManager({ menus, db, formatRp, showToast, getMenuHPP }) {
 function AdminMemberManager({ members, db, showToast }) {
   const [editingMember, setEditingMember] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortMember, setSortMember] = useState('newest'); // newest, points-desc, points-asc, name-asc
 
-  const processedMembers = useMemo(() => {
-      let filtered = members.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()) || (m.phone && m.phone.includes(searchQuery)));
-      return filtered.sort((a, b) => {
-          if (sortMember === 'points-desc') return (b.points || 0) - (a.points || 0);
-          if (sortMember === 'points-asc') return (a.points || 0) - (b.points || 0);
-          if (sortMember === 'name-asc') return a.name.localeCompare(b.name);
-          if (sortMember === 'newest') return (b.joinedAt || 0) - (a.joinedAt || 0);
-          return 0;
-      });
-  }, [members, searchQuery, sortMember]);
+  const filteredMembers = members.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()) || (m.phone && m.phone.includes(searchQuery)));
 
   const handleSave = async (e) => { e.preventDefault(); try { await updateDoc(getDocRef('members', editingMember.dbId), { name: editingMember.name, phone: editingMember.phone, points: Number(editingMember.points) }); setEditingMember(null); showToast("Data member diperbarui!", "success"); } catch (error) { showToast("Gagal memperbarui data", "error"); } };
 
@@ -2286,27 +2455,16 @@ function AdminMemberManager({ members, db, showToast }) {
     <div className="flex-1 p-6 overflow-y-auto bg-slate-50 relative">
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
         <h2 className="text-2xl font-bold">Daftar Member</h2>
-        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-            <div className="relative w-full md:w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input type="text" placeholder="Cari nama / no wa..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:border-red-500 outline-none" />
-            </div>
-            <select value={sortMember} onChange={e=>setSortMember(e.target.value)} className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:border-red-500">
-                <option value="newest">Terbaru</option>
-                <option value="points-desc">Poin Terbanyak</option>
-                <option value="points-asc">Poin Sedikit</option>
-                <option value="name-asc">Nama (A-Z)</option>
-            </select>
-        </div>
+        <div className="relative w-full md:w-64"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} /><input type="text" placeholder="Cari nama / no wa..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:border-red-500 outline-none" /></div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {processedMembers.map(m => (
+        {filteredMembers.map(m => (
           <div key={m.dbId} className="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm">
             <div><h3 className="font-bold text-slate-800">{m.name}</h3><p className="text-slate-500 text-sm mt-0.5">{m.phone}</p><p className="text-yellow-600 font-bold text-sm mt-1">{m.points || 0} Poin</p></div>
             <div className="flex gap-2"><button onClick={() => setEditingMember(m)} className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"><Edit2 size={18} /></button><button onClick={() => { if(window.confirm('Hapus member ini?')) deleteDoc(getDocRef('members', m.dbId)) }} className="p-2 bg-red-50 text-red-500 hover:bg-red-100 rounded-lg transition-colors"><Trash2 size={18}/></button></div>
           </div>
         ))}
-        {processedMembers.length === 0 && <p className="text-slate-500 col-span-2 text-center py-10">Member tidak ditemukan</p>}
+        {filteredMembers.length === 0 && <p className="text-slate-500 col-span-2 text-center py-10">Member tidak ditemukan</p>}
       </div>
 
       {editingMember && (
